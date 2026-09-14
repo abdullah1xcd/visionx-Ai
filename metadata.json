@@ -1,0 +1,6 @@
+{
+  "name": "VisionX AI",
+  "description": "Intelligent Computer Vision & Object Analysis Windows desktop application with real-time detection, tracking, vehicle analysis, and AI enhancement.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

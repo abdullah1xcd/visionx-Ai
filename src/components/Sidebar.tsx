@@ -1,0 +1,124 @@
+import React from 'react';
+import {
+  LayoutDashboard,
+  Video,
+  PlaySquare,
+  BarChart3,
+  Bell,
+  Settings,
+  Database,
+  Cpu,
+  Camera
+} from 'lucide-react';
+
+interface SidebarProps {
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+  unreadAlertsCount: number;
+  computeDevice: string;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onTabChange,
+  unreadAlertsCount,
+  computeDevice
+}) => {
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'cameras', label: 'Cameras', icon: Video },
+    { id: 'video_analysis', label: 'Video Analysis', icon: PlaySquare },
+    { id: 'statistics', label: 'Statistics', icon: BarChart3 },
+    { id: 'alerts', label: 'Alerts', icon: Bell, badge: unreadAlertsCount > 0 ? unreadAlertsCount : undefined },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ];
+
+  return (
+    <aside className="w-52 bg-[#0D1117] border-r border-[#252C35] flex flex-col justify-between shrink-0 select-none">
+      {/* Brand Header & Primary Navigation */}
+      <div>
+        <div className="px-4 py-4 border-b border-[#252C35]">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-[#D4AF37] flex items-center justify-center font-black text-[#080A0D] text-xs shadow-sm">
+              VX
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-wider text-[#F4F6F8]">
+                VISION<span className="text-[#D4AF37]">X</span> AI
+              </h1>
+              <p className="text-[9px] text-[#68727D] font-medium tracking-wide">
+                Surveillance & Analytics
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="p-2 space-y-0.5">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onTabChange(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded text-xs font-medium transition-colors cursor-pointer text-left ${
+                  isActive
+                    ? 'bg-[#161C24] text-[#D4AF37] font-semibold border-l-2 border-[#D4AF37]'
+                    : 'text-[#9AA4AF] hover:bg-[#11161D] hover:text-[#F4F6F8]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#D4AF37]' : 'text-[#68727D]'}`} />
+                  <span>{item.label}</span>
+                </div>
+
+                {item.badge && (
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* System Status & Version Footer */}
+      <div className="p-3 border-t border-[#252C35] space-y-3">
+        {/* Compact System Section */}
+        <div className="space-y-1.5 text-[10px] font-mono">
+          <div className="flex items-center justify-between text-[#9AA4AF]">
+            <span className="flex items-center gap-1.5 text-[#68727D]">
+              <Cpu className="w-3 h-3 text-[#D4AF37]" />
+              AI ENGINE
+            </span>
+            <span className="font-bold text-[#F4F6F8]">{computeDevice}</span>
+          </div>
+
+          <div className="flex items-center justify-between text-[#9AA4AF]">
+            <span className="flex items-center gap-1.5 text-[#68727D]">
+              <Camera className="w-3 h-3 text-emerald-400" />
+              INPUT MODE
+            </span>
+            <span className="text-emerald-400 font-bold">READY</span>
+          </div>
+
+          <div className="flex items-center justify-between text-[#9AA4AF]">
+            <span className="flex items-center gap-1.5 text-[#68727D]">
+              <Database className="w-3 h-3 text-sky-400" />
+              DATABASE
+            </span>
+            <span className="text-sky-400 font-bold">SQLITE 3</span>
+          </div>
+        </div>
+
+        {/* Windows Applet Build Tag */}
+        <div className="text-[9px] text-[#68727D] font-mono border-t border-[#252C35] pt-2 flex items-center justify-between">
+          <span>VX-WIN-x64</span>
+          <span className="text-[#D4AF37]">v2.4.0</span>
+        </div>
+      </div>
+    </aside>
+  );
+};
