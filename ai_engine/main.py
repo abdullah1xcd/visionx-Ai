@@ -12,9 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
-MODEL_PATH = os.getenv("VISIONX_MODEL", "yolo26s.pt")
+MODEL_PATH = os.getenv("VISIONX_MODEL", "yolo26m.pt")
 CONF = float(os.getenv("VISIONX_DEFAULT_CONF", "0.35"))
 IOU = float(os.getenv("VISIONX_IOU", "0.50"))
+IMG_SIZE = int(os.getenv("VISIONX_IMG_SIZE", "960"))
 DEVICE = os.getenv("VISIONX_DEVICE", "auto")
 
 app = FastAPI(title="VisionX AI Engine", version="2.0.0")
@@ -100,6 +101,7 @@ def health() -> dict[str, Any]:
     return {
         "ok": model is not None,
         "model": MODEL_PATH,
+            "img_size": IMG_SIZE,
         "device": str(resolve_device()),
         "status": "ready" if model is not None else "error",
         "error": last_error,
@@ -128,6 +130,8 @@ def detect(req: DetectionRequest) -> dict[str, Any]:
             tracker="bytetrack.yaml",
             conf=conf,
             iou=iou,
+            imgsz=IMG_SIZE,
+            max_det=300,
             device=resolve_device(),
             verbose=False,
         )
