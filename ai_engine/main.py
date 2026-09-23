@@ -28,6 +28,7 @@ app.add_middleware(
 
 model: YOLO | None = None
 last_error: str | None = None
+reset_tracker = True
 
 PERSON = {"person"}
 BIKE = {"bicycle"}
@@ -107,14 +108,14 @@ def health() -> dict[str, Any]:
 
 @app.post("/reset")
 def reset() -> dict[str, bool]:
-    global model
-    # Reinitializing is intentionally avoided; a fresh tracker state is created
-    # by calling track with persist=False on the first frame after reset.
+    global reset_tracker
+    reset_tracker = True
     return {"ok": True}
 
 
 @app.post("/detect")
 def detect(req: DetectionRequest) -> dict[str, Any]:
+    global reset_tracker
     started = time.perf_counter()
     image = decode_image(req.image)
     try:
@@ -123,13 +124,14 @@ def detect(req: DetectionRequest) -> dict[str, Any]:
         iou = max(0.05, min(0.95, req.iou if req.iou is not None else IOU))
         results = detector.track(
             source=image,
-            persist=True,
+            persist=not reset_tracker,
             tracker="bytetrack.yaml",
             conf=conf,
             iou=iou,
             device=resolve_device(),
             verbose=False,
         )
+        reset_tracker = False
         result = results[0]
         names = result.names
         detections = []
