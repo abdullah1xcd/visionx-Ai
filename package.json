@@ -1,10 +1,11 @@
 {
   "name": "visionx-ai",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"npm:server\" \"vite --port=3000 --host=0.0.0.0\"",
+    "dev": "concurrently -k \"npm:ai\" \"npm:server\" \"vite --port=3000 --host=0.0.0.0\"",
+    "ai": "python -m uvicorn ai_engine.main:app --host 127.0.0.1 --port 8000",
     "server": "node server.mjs",
     "build": "vite build",
     "start": "node server.mjs",
