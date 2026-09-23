@@ -246,3 +246,64 @@ python scripts/benchmark.py
 - **V1.1**: Fine-tuned license plate detector models for regional plates, advanced perspective warp speed calibration.
 - **V2.0**: Multi-camera simultaneous grid view, customizable boundary tripwires.
 - **V3.0**: Mobile alerting bridge, enterprise NVR integration.
+
+
+---
+
+## 11. AI Engine 2.0 — YOLO + ByteTrack
+
+VisionX now includes a Python AI engine for higher-quality detection and tracking. The React UI automatically uses the local Python engine when it is available and falls back to the browser detector if it is not.
+
+### Python setup (Windows)
+
+Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements-visionx.txt
+```
+
+Ultralytics recommends Python 3.8+ and notes that PyTorch/CUDA installation can vary by operating system and CUDA version; if you need a specific NVIDIA CUDA build, install the matching PyTorch build first. citeturn0search0
+
+PaddleOCR 3.x requires an inference engine such as PaddlePaddle or Transformers. The requirements file includes PaddlePaddle for the default setup; for a specific GPU/CUDA combination, use the official PaddlePaddle installation instructions. citeturn0search2turn0search4
+
+For ONNX Runtime, install exactly one runtime variant in an environment: CPU uses `onnxruntime`; NVIDIA CUDA 12.x uses `onnxruntime-gpu`. Do not install both variants together. citeturn0search1
+
+### Run
+
+```powershell
+npm install
+npm run dev
+```
+
+The `dev` script starts:
+
+- Vite UI on `http://localhost:3000`
+- Node/Express API on `http://localhost:3001`
+- Python YOLO/ByteTrack API on `http://127.0.0.1:8000`
+
+The first YOLO inference downloads the configured model weights automatically. The default is `yolo26s.pt`; set `VISIONX_MODEL` to another Ultralytics model if you need a different speed/accuracy trade-off. Ultralytics supports detection and tracking modes and automatic model-weight downloads. citeturn0search0turn0search5
+
+### AI pipeline
+
+```
+Camera / RTSP
+     ↓
+FFmpeg / OpenCV
+     ↓
+YOLO detection
+     ↓
+ByteTrack persistent IDs
+     ↓
+VisionX analytics
+     ├── object counts
+     ├── direction
+     ├── calibrated speed estimates
+     ├── quality metrics
+     └── database events
+```
+
+The AI engine deliberately maps `car`, `truck`, `bus`, and `motorcycle` into VisionX's `car` category. It does not claim that the default COCO model can detect license plates or physical cameras; those require dedicated models/OCR pipelines.
+
