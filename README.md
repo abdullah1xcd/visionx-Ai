@@ -265,11 +265,11 @@ python -m pip install --upgrade pip
 pip install -r requirements-visionx.txt
 ```
 
-Ultralytics recommends Python 3.8+ and notes that PyTorch/CUDA installation can vary by operating system and CUDA version; if you need a specific NVIDIA CUDA build, install the matching PyTorch build first. citeturn0search0
+Ultralytics recommends Python 3.8+ and notes that PyTorch/CUDA installation can vary by operating system and CUDA version; if you need a specific NVIDIA CUDA build, install the matching PyTorch build first.
 
-PaddleOCR 3.x requires an inference engine such as PaddlePaddle or Transformers. The requirements file includes PaddlePaddle for the default setup; for a specific GPU/CUDA combination, use the official PaddlePaddle installation instructions. citeturn0search2turn0search4
+PaddleOCR 3.x requires an inference engine such as PaddlePaddle or Transformers. The requirements file includes PaddlePaddle for the default setup; for a specific GPU/CUDA combination, use the official PaddlePaddle installation instructions.
 
-For ONNX Runtime, install exactly one runtime variant in an environment: CPU uses `onnxruntime`; NVIDIA CUDA 12.x uses `onnxruntime-gpu`. Do not install both variants together. citeturn0search1
+For ONNX Runtime, install exactly one runtime variant in an environment: CPU uses `onnxruntime`; NVIDIA CUDA 12.x uses `onnxruntime-gpu`. Do not install both variants together.
 
 ### Run
 
@@ -284,7 +284,7 @@ The `dev` script starts:
 - Node/Express API on `http://localhost:3001`
 - Python YOLO/ByteTrack API on `http://127.0.0.1:8000`
 
-The first YOLO inference downloads the configured model weights automatically. The default is `yolo26s.pt`; set `VISIONX_MODEL` to another Ultralytics model if you need a different speed/accuracy trade-off. Ultralytics supports detection and tracking modes and automatic model-weight downloads. citeturn0search0turn0search5
+The first YOLO inference downloads the configured model weights automatically. The default is `yolo26s.pt`; set `VISIONX_MODEL` to another Ultralytics model if you need a different speed/accuracy trade-off. Ultralytics supports detection and tracking modes and automatic model-weight downloads.
 
 ### AI pipeline
 
