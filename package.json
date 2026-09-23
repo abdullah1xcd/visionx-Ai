@@ -1,16 +1,17 @@
 {
   "name": "visionx-ai",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"npm:server\" \"vite --port=3000 --host=0.0.0.0\"",
+    "dev": "concurrently -k \"npm:ai\" \"npm:server\" \"vite --port=3000 --host=0.0.0.0\"",
     "server": "node server.mjs",
     "build": "vite build",
     "start": "node server.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "ai": "python -m uvicorn ai_engine.main:app --host 127.0.0.1 --port 8000"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
