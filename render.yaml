@@ -30,7 +30,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: VISIONX_MODEL
-        value: yolo26n.pt
+        value: yolo11n.pt
       - key: VISIONX_IMG_SIZE
         value: 640
       - key: VISIONX_DEVICE

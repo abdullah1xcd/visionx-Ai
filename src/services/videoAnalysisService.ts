@@ -1,37 +1,64 @@
 import { detectionService, DetectionResult } from './detectionService';
 import { CategoryType, VideoAnalysisStats, VideoQualityMetrics, TrackedVideoObject, VideoTimelineEvent } from '../types';
 export interface VideoAnalysisSnapshot{frameNumber:number;timeSeconds:number;detections:DetectionResult[];currentCounts:Record<CategoryType,number>;uniqueCounts:Record<CategoryType,number>}
-export interface VideoAnalysisCallbacks{onFrame?:(s:VideoAnalysisSnapshot)=>void;onProgress?:(p:number,f:number,t:number)=>void;onError?:(e:Error)=>void;onComplete?:()=>void}
+export interface VideoAnalysisCallbacks{onFrame?:(s:VideoAnalysisSnapshot)=>void;onProgress?:(p:number,f:number,t:number)=>void;onError?:(e:Error)=>void;onComplete?:()=>void|Promise<void>}
 export interface VideoAnalysisRun{stop:()=>void;pause:()=>void;resume:()=>void}
+type VideoFrameMetadata={mediaTime:number;presentedFrames:number;expectedDisplayTime:number;width:number;height:number};
+type VideoWithFrameCallback=HTMLVideoElement&{requestVideoFrameCallback?:(callback:(now:number,metadata:VideoFrameMetadata)=>void)=>number;cancelVideoFrameCallback?:(id:number)=>void};
 const emptyCounts=():Record<CategoryType,number>=>({all:0,person:0,car:0,bicycle:0,camera:0});
 export class VideoAnalysisService{
- private cancelled=false;private paused=false;private running=false;
- public stop(){this.cancelled=true;this.paused=false;}
- public pause(){this.paused=true;}
- public resume(){this.paused=false;}
- public async analyzeVideo(video:HTMLVideoElement,options:{confidenceThreshold?:number;sampleEveryFrames?:number;callbacks?:VideoAnalysisCallbacks}={}):Promise<VideoAnalysisRun>{
-  this.cancelled=false;this.paused=false;if(this.running)this.stop();this.running=true;const threshold=options.confidenceThreshold??.4;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??3));const cb=options.callbacks??{};
-  try{await this.waitForMetadata(video);await this.waitForFrame(video);if(!Number.isFinite(video.duration)||video.duration<=0||!video.videoWidth||!video.videoHeight)throw new Error('The selected video has no usable duration or dimensions.');detectionService.resetTracking();void this.process(video,threshold,sampleEvery,cb);}catch(e){this.running=false;throw e;}
+ private cancelled=false;private paused=false;private running=false;private activeVideo:HTMLVideoElement|null=null;private frameCallbackId:number|null=null;private fallbackRaf:number|null=null;
+ public stop(){this.cancelled=true;this.paused=false;this.activeVideo?.pause();const v=this.activeVideo as VideoWithFrameCallback|null;if(v&&this.frameCallbackId!==null)v.cancelVideoFrameCallback?.(this.frameCallbackId);if(this.fallbackRaf!==null)cancelAnimationFrame(this.fallbackRaf);this.frameCallbackId=null;this.fallbackRaf=null;}
+ public pause(){this.paused=true;this.activeVideo?.pause();}
+ public resume(){this.paused=false;void this.activeVideo?.play().catch(()=>{});}
+ public async analyzeVideo(video:HTMLVideoElement,options:{confidenceThreshold?:number;classThresholds?:Partial<Record<'person'|'car'|'bicycle'|'camera',number>>;sampleEveryFrames?:number;callbacks?:VideoAnalysisCallbacks}={}):Promise<VideoAnalysisRun>{
+  if(this.running)this.stop();this.cancelled=false;this.paused=false;this.running=true;this.activeVideo=video;
+  const threshold=options.confidenceThreshold??.4;const classThresholds=options.classThresholds;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??1));const cb=options.callbacks??{};
+  try{
+   await this.waitForMetadata(video);await this.waitForFrame(video);
+   if(!Number.isFinite(video.duration)||video.duration<=0||!video.videoWidth||!video.videoHeight)throw new Error('The selected video has no usable duration or dimensions.');
+   detectionService.resetTracking();if(video.currentTime>0)await this.seek(video,0);video.muted=true;video.playsInline=true;video.playbackRate=1;await video.play();
+   void this.process(video,threshold,classThresholds,sampleEvery,cb);
+  }catch(e){this.running=false;this.activeVideo=null;throw e;}
   return{stop:()=>this.stop(),pause:()=>this.pause(),resume:()=>this.resume()};
  }
- private async process(video:HTMLVideoElement,threshold:number,sampleEvery:number,cb:VideoAnalysisCallbacks){try{
-  const duration=video.duration;const stepSeconds=Math.max(.04,sampleEvery/30);let frame=0;let last=-1;
-  while(!this.cancelled){while(this.paused&&!this.cancelled)await this.sleep(50);if(this.cancelled)break;
-   const target=Math.min(duration,Math.max(0,last<0?0:last+stepSeconds));if(last>=0&&target<=last+.0001)break;
-   await this.seek(video,target);if(this.cancelled)break;await this.waitForFrame(video);
-   const detections=await detectionService.detectFrame(video,frame,threshold);const current=emptyCounts();for(const d of detections)current[d.category]++;current.all=detections.length;
-   const diag=detectionService.getDiagnostics(video.videoWidth,video.videoHeight,0);const unique={all:diag.uniqueTrackedCounts.person+diag.uniqueTrackedCounts.car+diag.uniqueTrackedCounts.bicycle+diag.uniqueTrackedCounts.camera,person:diag.uniqueTrackedCounts.person,car:diag.uniqueTrackedCounts.car,bicycle:diag.uniqueTrackedCounts.bicycle,camera:diag.uniqueTrackedCounts.camera};
-   cb.onFrame?.({frameNumber:frame,timeSeconds:video.currentTime,detections,currentCounts:current,uniqueCounts:unique});cb.onProgress?.(Math.min(100,video.currentTime/duration*100),frame,video.currentTime);last=video.currentTime;frame+=sampleEvery;if(last>=duration-.001)break;
-  }
-  if(!this.cancelled){await this.seek(video,duration);cb.onProgress?.(100,frame,duration);cb.onComplete?.();}
- }catch(e){if(!this.cancelled)cb.onError?.(e instanceof Error?e:new Error(String(e)));}finally{this.running=false;}}
+ private async process(video:HTMLVideoElement,threshold:number,classThresholds:Partial<Record<'person'|'car'|'bicycle'|'camera',number>>|undefined,sampleEvery:number,cb:VideoAnalysisCallbacks){
+  const frameVideo=video as VideoWithFrameCallback;let frame=0,lastProgressAt=0,inferenceBusy=false,ended=false,completed=false;
+  const finish=()=>{if(completed||this.cancelled)return;completed=true;video.pause();this.running=false;this.activeVideo=null;cb.onProgress?.(100,frame,video.duration);void Promise.resolve(cb.onComplete?.()).catch(e=>cb.onError?.(e instanceof Error?e:new Error(String(e))));};
+  const maybeFinish=()=>{if(ended&&!inferenceBusy)finish();};
+  const onEnded=()=>{ended=true;maybeFinish();};
+  video.addEventListener('ended',onEnded,{once:true});
+  const schedule=()=>{
+   if(this.cancelled||ended)return;
+   if(frameVideo.requestVideoFrameCallback){this.frameCallbackId=frameVideo.requestVideoFrameCallback((now,metadata)=>onFrame(now,metadata));}
+   else{this.fallbackRaf=requestAnimationFrame(now=>onFrame(now,{mediaTime:video.currentTime,presentedFrames:frame+1,expectedDisplayTime:now,width:video.videoWidth,height:video.videoHeight}));}
+  };
+  const onFrame=(now:number,metadata:VideoFrameMetadata)=>{
+   if(this.cancelled||ended)return;
+   const mediaTime=Math.max(0,Math.min(video.duration,metadata.mediaTime||video.currentTime));
+   const currentFrame=frame++;
+   if(currentFrame%sampleEvery===0&&!inferenceBusy&&video.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA){
+    const snapshot=document.createElement('canvas');snapshot.width=video.videoWidth;snapshot.height=video.videoHeight;
+    const context=snapshot.getContext('2d',{alpha:false});if(context){context.drawImage(video,0,0,snapshot.width,snapshot.height);inferenceBusy=true;video.pause();
+     void detectionService.detectFrame(snapshot,currentFrame,threshold,classThresholds).then(detections=>{
+      if(this.cancelled)return;const current=emptyCounts();for(const d of detections)current[d.category]++;current.all=detections.length;
+      const diag=detectionService.getDiagnostics(video.videoWidth,video.videoHeight,0);const unique={all:diag.uniqueTrackedCounts.person+diag.uniqueTrackedCounts.car+diag.uniqueTrackedCounts.bicycle+diag.uniqueTrackedCounts.camera,person:diag.uniqueTrackedCounts.person,car:diag.uniqueTrackedCounts.car,bicycle:diag.uniqueTrackedCounts.bicycle,camera:diag.uniqueTrackedCounts.camera};
+      cb.onFrame?.({frameNumber:currentFrame,timeSeconds:mediaTime,detections,currentCounts:current,uniqueCounts:unique});
+     }).catch(e=>{if(!this.cancelled)cb.onError?.(e instanceof Error?e:new Error(String(e)));}).finally(()=>{inferenceBusy=false;if(!this.cancelled&&!ended&&!video.ended)void video.play().catch(e=>cb.onError?.(e instanceof Error?e:new Error(String(e))));maybeFinish();});
+    }
+   }
+   if(now-lastProgressAt>=200){lastProgressAt=now;cb.onProgress?.(Math.min(100,mediaTime/video.duration*100),currentFrame,mediaTime);}
+   if(video.ended){ended=true;maybeFinish();return;}schedule();
+  };
+  schedule();
+ }
  public buildStats(snaps:VideoAnalysisSnapshot[],enhancedFramesCount=0,enhancedCropsCount=0):VideoAnalysisStats{const total={person:0,car:0,bicycle:0,camera:0};let unique={person:0,car:0,bicycle:0,camera:0};const timelineDensity=snaps.map(s=>({time:this.formatTime(s.timeSeconds),seconds:s.timeSeconds,people:s.currentCounts.person,cars:s.currentCounts.car,bicycles:s.currentCounts.bicycle,cameras:s.currentCounts.camera}));for(const s of snaps){total.person+=s.currentCounts.person;total.car+=s.currentCounts.car;total.bicycle+=s.currentCounts.bicycle;total.camera+=s.currentCounts.camera;unique={person:s.uniqueCounts.person,car:s.uniqueCounts.car,bicycle:s.uniqueCounts.bicycle,camera:s.uniqueCounts.camera};}return{totalDetections:total,uniqueObjects:unique,timelineDensity,enhancedFramesCount,enhancedCropsCount};}
- public buildTrackedObjects(snaps:VideoAnalysisSnapshot[]):TrackedVideoObject[]{const map=new Map<string,TrackedVideoObject>();for(const s of snaps)for(const d of s.detections){const key=`${d.category}:${d.tracking_id}`;const old=map.get(key);if(!old)map.set(key,{id:`${d.category.toUpperCase()} #${d.tracking_id}`,trackId:d.tracking_id,category:d.category as any,firstSeenTime:this.formatTime(s.timeSeconds),firstSeenSeconds:s.timeSeconds,lastSeenTime:this.formatTime(s.timeSeconds),lastSeenSeconds:s.timeSeconds,durationVisible:'00:00',detectionCount:1,avgConfidence:d.confidence,maxConfidence:d.confidence,minConfidence:d.confidence,movementDirection:'Unknown',approxPath:'Not calculated',currentBbox:[d.x1,d.y1,d.x2,d.y2]});else{old.lastSeenTime=this.formatTime(s.timeSeconds);old.lastSeenSeconds=s.timeSeconds;old.durationVisible=this.formatTime(Math.max(0,old.lastSeenSeconds-old.firstSeenSeconds));old.detectionCount++;old.avgConfidence=((old.avgConfidence*(old.detectionCount-1))+d.confidence)/old.detectionCount;old.maxConfidence=Math.max(old.maxConfidence,d.confidence);old.minConfidence=Math.min(old.minConfidence,d.confidence);old.currentBbox=[d.x1,d.y1,d.x2,d.y2];}}return[...map.values()];}
- public buildTimeline(snaps:VideoAnalysisSnapshot[]):VideoTimelineEvent[]{const events:VideoTimelineEvent[]=[];const seen=new Set<string>();for(const s of snaps)for(const d of s.detections){const key=`${d.category}:${d.tracking_id}`,objectId=`${d.category.toUpperCase()} #${d.tracking_id}`,type=seen.has(key)?'detected':'entered';events.push({id:`${key}-${s.frameNumber}`,timestamp:this.formatTime(s.timeSeconds),timestampSeconds:s.timeSeconds,type,objectId,category:d.category as any,message:type==='entered'?`${objectId} entered detection`: `${objectId} detected`});seen.add(key);}return events;}
+ public buildTrackedObjects(snaps:VideoAnalysisSnapshot[]):TrackedVideoObject[]{const map=new Map<string,TrackedVideoObject>();for(const s of snaps)for(const d of s.detections){if(d.tracking_id<=0)continue;const key=`${d.category}:${d.tracking_id}`;const old=map.get(key);if(!old)map.set(key,{id:`${d.category.toUpperCase()} #${d.tracking_id}`,trackId:d.tracking_id,category:d.category as any,firstSeenTime:this.formatTime(s.timeSeconds),firstSeenSeconds:s.timeSeconds,lastSeenTime:this.formatTime(s.timeSeconds),lastSeenSeconds:s.timeSeconds,durationVisible:'00:00',detectionCount:1,avgConfidence:d.confidence,maxConfidence:d.confidence,minConfidence:d.confidence,movementDirection:'Unknown',approxPath:'Not calculated',currentBbox:[d.x1,d.y1,d.x2,d.y2]});else{old.lastSeenTime=this.formatTime(s.timeSeconds);old.lastSeenSeconds=s.timeSeconds;old.durationVisible=this.formatTime(Math.max(0,old.lastSeenSeconds-old.firstSeenSeconds));old.detectionCount++;old.avgConfidence=((old.avgConfidence*(old.detectionCount-1))+d.confidence)/old.detectionCount;old.maxConfidence=Math.max(old.maxConfidence,d.confidence);old.minConfidence=Math.min(old.minConfidence,d.confidence);old.currentBbox=[d.x1,d.y1,d.x2,d.y2];}}return[...map.values()];}
+ public buildTimeline(snaps:VideoAnalysisSnapshot[]):VideoTimelineEvent[]{const events:VideoTimelineEvent[]=[];const seen=new Set<string>();for(const s of snaps)for(const d of s.detections){if(d.tracking_id<=0)continue;const key=`${d.category}:${d.tracking_id}`,objectId=`${d.category.toUpperCase()} #${d.tracking_id}`,type=seen.has(key)?'detected':'entered';events.push({id:`${key}-${s.frameNumber}`,timestamp:this.formatTime(s.timeSeconds),timestampSeconds:s.timeSeconds,type,objectId,category:d.category as any,message:type==='entered'?`${objectId} entered detection`: `${objectId} detected`});seen.add(key);}return events;}
  public async measureQuality(video:HTMLVideoElement):Promise<VideoQualityMetrics>{await this.waitForMetadata(video);await this.waitForFrame(video);const canvas=document.createElement('canvas'),width=Math.min(640,video.videoWidth),height=Math.max(1,Math.round(video.videoHeight*(width/video.videoWidth)));canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw new Error('Canvas 2D context is unavailable.');ctx.drawImage(video,0,0,width,height);const p=ctx.getImageData(0,0,width,height).data;let sum=0,sum2=0;for(let i=0;i<p.length;i+=4){const l=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];sum+=l;sum2+=l*l;}const n=p.length/4,b=n?sum/n:0,v=n?Math.max(0,sum2/n-b*b):0;const avgBrightness:VideoQualityMetrics['avgBrightness']=b<65?'Low':b>195?'High':b>=105?'Optimal':'Medium';const exposure:VideoQualityMetrics['exposure']=b<55?'Underexposed':b>215?'Overexposed':'Normal';const contrast=v>=1600?'High':v>=500?'Medium':'Low';const score=Math.round(Math.max(0,Math.min(100,45+Math.min(25,v/80)+(exposure==='Normal'?30:10))));return{overallScore:score,resolution:`${video.videoWidth} × ${video.videoHeight}`,fps:0,avgBrightness,brightnessValue:Math.round(b),contrast,contrastRatio:Math.round(Math.sqrt(v)*100)/100,blurScore:0,blurLevel:'Medium',noiseLevel:'Medium',sharpness:'Medium',exposure,dynamicRange:`${Math.round(Math.max(0,Math.min(255,b-2*Math.sqrt(v))))}–${Math.round(Math.max(0,Math.min(255,b+2*Math.sqrt(v))))}`};}
  private waitForMetadata(v:HTMLVideoElement){if(v.readyState>=HTMLMediaElement.HAVE_METADATA)return Promise.resolve();return new Promise<void>((resolve,reject)=>{const ok=()=>{cleanup();resolve()},bad=()=>{cleanup();reject(new Error('Unable to load video metadata.'))},cleanup=()=>{v.removeEventListener('loadedmetadata',ok);v.removeEventListener('error',bad)};v.addEventListener('loadedmetadata',ok,{once:true});v.addEventListener('error',bad,{once:true});});}
  private waitForFrame(v:HTMLVideoElement){if(v.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA)return Promise.resolve();return new Promise<void>((resolve,reject)=>{const ok=()=>{cleanup();resolve()},bad=()=>{cleanup();reject(new Error('Unable to decode a video frame.'))},cleanup=()=>{v.removeEventListener('loadeddata',ok);v.removeEventListener('error',bad)};v.addEventListener('loadeddata',ok,{once:true});v.addEventListener('error',bad,{once:true});});}
- private seek(v:HTMLVideoElement,time:number){return new Promise<void>((resolve,reject)=>{const target=Math.max(0,Math.min(v.duration,time));if(Math.abs(v.currentTime-target)<.001){resolve();return;}let done=false;const finish=()=>{if(done)return;done=true;v.removeEventListener('seeked',ok);v.removeEventListener('error',bad);resolve()};const ok=()=>finish();const bad=()=>{if(done)return;done=true;v.removeEventListener('seeked',ok);v.removeEventListener('error',bad);reject(new Error('Video seek/decode failed.'))};v.addEventListener('seeked',ok,{once:true});v.addEventListener('error',bad,{once:true});v.currentTime=target;});}
- private sleep(ms:number){return new Promise(r=>setTimeout(r,ms));}private formatTime(s:number){const n=Math.max(0,Math.floor(s));return`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;}
+ private seek(v:HTMLVideoElement,time:number){return new Promise<void>((resolve,reject)=>{const target=Math.max(0,Math.min(v.duration,time));if(Math.abs(v.currentTime-target)<.001){resolve();return;}const ok=()=>{cleanup();resolve()},bad=()=>{cleanup();reject(new Error('Video seek/decode failed.'))},cleanup=()=>{v.removeEventListener('seeked',ok);v.removeEventListener('error',bad)};v.addEventListener('seeked',ok,{once:true});v.addEventListener('error',bad,{once:true});v.currentTime=target;});}
+ private formatTime(s:number){const n=Math.max(0,Math.floor(s));return`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;}
 }
 export const videoAnalysisService=new VideoAnalysisService();export default videoAnalysisService;

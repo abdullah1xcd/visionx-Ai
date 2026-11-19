@@ -42,16 +42,14 @@ export const persistenceService = {
   updateVideoRun: (id: string, payload: Record<string, unknown>) => api(`/api/video-runs/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   saveDetections: (id: string, items: unknown[]) => {
     if (!items.length) return Promise.resolve({ ok: true });
-    let result: Promise<{ ok: boolean }>;
-    detectionQueue = detectionQueue.then(async () => {
-      result = await api<{ ok: boolean }>(`/api/video-runs/${encodeURIComponent(id)}/detections`, {
-        method: 'POST',
-        body: JSON.stringify({ items }),
-      });
-      return result;
-    }).catch(() => ({ ok: false }));
-    return detectionQueue.then(() => result!);
+    const task = detectionQueue.then(() => api<{ ok: boolean }>(`/api/video-runs/${encodeURIComponent(id)}/detections`, {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }));
+    detectionQueue = task.then(() => undefined, () => undefined);
+    return task;
   },
+  flushDetections: () => detectionQueue,
   statistics: () => api<{
     totals: { category: string; count: number }[];
     unique: { category: string; count: number }[];

@@ -94,22 +94,22 @@ export function analyzeDetection(
   const displacement=Math.hypot(dx,dy);
   // A single-frame displacement is noisy; 8 px is a conservative local threshold.
   const moving=!!previous && displacement>=8;
-  let direction='Stationary';
-  if(moving) direction=Math.abs(dx)>=Math.abs(dy)?(dx>0?'Right':'Left'):(dy>0?'Down':'Up');
+  let direction=previous?'No clear movement':'Insufficient temporal evidence';
+  if(moving) direction=Math.abs(dx)>=Math.abs(dy)?(dx>0?'Possible right':'Possible left'):(dy>0?'Possible down':'Possible up');
 
   const isCar=cat==='car';
   const speed=isCar?estimateSpeedKmh(previous?[pw,ph]:null,[cx,cy],deltaSeconds,pixelsPerMeter):
     {speedKmh:null,calibrated:false,reason:'Speed requires camera calibration and stable multi-frame tracking.'};
 
   const color=source?estimateCropColor(source,[d.x1,d.y1,d.x2,d.y2],cat as 'person'|'car'|'bicycle'|'camera'):{color:'Unknown',confidence:0};
-  const width=d.x2-d.x1,height=d.y2-d.y1,aspect=height/Math.max(1,width);
+  const width=d.x2-d.x1,height=d.y2-d.y1;
 
   let activity='Detected',posture='Not reliably determined';
   if(cat==='person'){
-    if(!previous) activity='Observed';
-    else activity=moving?'Moving':'Stationary';
-    // Bounding-box aspect ratio is not sufficient to claim posture.
-    posture=aspect>=1.45?'Likely upright (pose model recommended)':'Pose not reliably determined';
+    if(!previous) activity='Insufficient temporal evidence';
+    else activity=moving?'Possible movement':'No clear movement';
+    // A bounding box alone cannot determine human pose reliably.
+    posture='Not estimated (pose model required)';
   } else if(cat==='bicycle') activity=previous?(moving?'Moving':'Stationary'):'Observed';
 
   const vehicleType=isCar?(width/Math.max(1,height)>1.8?'Car / sedan-like':'Vehicle'):'N/A';

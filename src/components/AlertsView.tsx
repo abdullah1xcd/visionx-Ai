@@ -14,10 +14,10 @@ export const AlertsView: React.FC<AlertsViewProps> = ({
   onAcknowledgeAll
 }) => {
   return (
-    <div className="flex-1 p-6 overflow-y-auto bg-[#080A0D] text-[#F4F6F8]">
+    <div className="flex-1 min-w-0 p-3 sm:p-6 pb-24 md:pb-6 overflow-y-auto bg-[#080A0D] text-[#F4F6F8]">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#252C35] pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#252C35] pb-4">
           <div>
             <h2 className="text-xl font-black tracking-wide text-white uppercase">
               SYSTEM & DETECTION ALERTS
@@ -46,14 +46,14 @@ export const AlertsView: React.FC<AlertsViewProps> = ({
             return (
               <div
                 key={alert.id}
-                className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                className={`p-3 sm:p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 transition-all ${
                   alert.acknowledged
                     ? 'bg-[#0D1117] border-[#252C35] opacity-60'
                     : 'bg-[#11161D] border-[#252C35]'
                 }`}
                 style={{ borderLeftWidth: '3px', borderLeftColor: borderAccentColor }}
               >
-                <div className="flex items-start gap-3.5">
+                <div className="flex min-w-0 items-start gap-3.5">
                   <div className="mt-0.5">
                     {isCritical ? (
                       <ShieldAlert className="w-5 h-5 text-rose-500" />
@@ -97,7 +97,7 @@ export const AlertsView: React.FC<AlertsViewProps> = ({
                 {!alert.acknowledged && (
                   <button
                     onClick={() => onAcknowledgeAlert(alert.id)}
-                    className="px-3 py-1.5 rounded bg-[#161C24] hover:bg-[#1C232B] text-slate-200 hover:text-white border border-[#252C35] hover:border-[#D4AF37] text-xs font-semibold transition-colors cursor-pointer shrink-0 ml-4"
+                    className="self-start sm:self-auto px-3 py-1.5 rounded bg-[#161C24] hover:bg-[#1C232B] text-slate-200 hover:text-white border border-[#252C35] hover:border-[#D4AF37] text-xs font-semibold transition-colors cursor-pointer shrink-0 sm:ml-4"
                   >
                     Acknowledge
                   </button>
