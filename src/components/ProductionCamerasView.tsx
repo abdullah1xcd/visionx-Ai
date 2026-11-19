@@ -29,7 +29,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
       }
       const available = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
       setDevices(available);
-      if (!selectedDevice && available[0]) setSelectedDevice(available[0].deviceId);
+      if (!selectedDevice && available[0]) setSelectedDevice('0');
       if (!available.length) setMessage('No camera is currently visible to this browser. Allow camera permission from the Live AI Detection page, then refresh.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to list browser cameras.');
