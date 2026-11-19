@@ -176,7 +176,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>Night Vision Mode & Ambient Sensitivity</span>
           </h3>
 
-          <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-[#9AA4AF] font-semibold mb-1">Operating Mode:</label>
               <select
@@ -217,7 +217,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>Inference Engine & Resolution</span>
           </h3>
 
-          <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-[#9AA4AF] font-semibold mb-1">Compute Device:</label>
               <select
