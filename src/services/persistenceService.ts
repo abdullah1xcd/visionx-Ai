@@ -19,7 +19,7 @@ const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
   } catch {
     throw new Error(API_BASE ? `VisionX backend is unreachable at ${API_BASE}.` : 'VisionX backend is not reachable.');
   }
-  if (r.status === 401) {
+  if (r.status === 401 || r.status === 403) {
     await supabase.auth.signOut();
     throw new Error('Your session is invalid. Please sign in again.');
   }
@@ -34,6 +34,9 @@ let detectionQueue = Promise.resolve();
 
 export const persistenceService = {
   health: () => api<{ ok: boolean; sqlite: boolean; node: string }>('/api/health'),
+  discoverOnvif: () => api<any[]>('/api/onvif/discover'),
+  createStreamTicket: (url: string) => api<{ ticket: string }>('/api/stream-ticket', { method: 'POST', body: JSON.stringify({ url }) }),
+  streamUrl: (ticket: string) => apiUrl(`/api/stream?ticket=${encodeURIComponent(ticket)}`),
   cameras: () => api<CameraSourceItem[]>('/api/cameras'),
   saveCamera: (camera: CameraSourceItem) => api('/api/cameras', { method: 'POST', body: JSON.stringify(camera) }),
   removeCamera: (id: string) => api(`/api/cameras/${encodeURIComponent(id)}`, { method: 'DELETE' }),
