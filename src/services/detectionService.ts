@@ -47,7 +47,7 @@ class RealDetectionService {
    if(this.backendAvailable){
     try{
      const payload=await this.sourceToDataUrl(source);
-     const response=await fetch(this.aiEngineBaseUrl+'/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:payload.data,frame_number:frameNumber,confidence:threshold,class_thresholds:classThresholds,iou:0.5})});
+     const response=await fetch(this.aiEngineBaseUrl+'/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:payload.data,frame_number:frameNumber,confidence:classThresholds?Math.min(threshold,...Object.values(classThresholds)):threshold,class_thresholds:classThresholds,iou:0.5})});
      if(!response.ok)throw new Error('YOLO backend HTTP '+response.status);
      const data=await response.json() as {detections:BackendDetection[];inference_ms:number;device:string};
      this.lastInferenceTimeMs=Number(data.inference_ms)||Math.round(performance.now()-t0);this.deviceName=String(data.device||this.deviceName);this.engineStatus='ACTIVE';
