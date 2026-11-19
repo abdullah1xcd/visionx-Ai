@@ -41,13 +41,13 @@ class RealDetectionService {
   return{data:c.toDataURL('image/jpeg',0.78),scaleX:w/cw,scaleY:h/ch,w,h};
  }
 
- async detectFrame(source:Source,frameNumber:number,threshold=0.4):Promise<DetectionResult[]>{
+ async detectFrame(source:Source,frameNumber:number,threshold=0.4,classThresholds?:Partial<Record<'person'|'car'|'bicycle'|'camera',number>>):Promise<DetectionResult[]>{
   if(!this.isReady()||this.isInferenceRunning)return[];this.isInferenceRunning=true;const t0=performance.now();
   try{
    if(this.backendAvailable){
     try{
      const payload=await this.sourceToDataUrl(source);
-     const response=await fetch(this.aiEngineBaseUrl+'/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:payload.data,frame_number:frameNumber,confidence:threshold,iou:0.5})});
+     const response=await fetch(this.aiEngineBaseUrl+'/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:payload.data,frame_number:frameNumber,confidence:threshold,class_thresholds:classThresholds,iou:0.5})});
      if(!response.ok)throw new Error('YOLO backend HTTP '+response.status);
      const data=await response.json() as {detections:BackendDetection[];inference_ms:number;device:string};
      this.lastInferenceTimeMs=Number(data.inference_ms)||Math.round(performance.now()-t0);this.deviceName=String(data.device||this.deviceName);this.engineStatus='ACTIVE';
@@ -58,7 +58,7 @@ class RealDetectionService {
    if(!this.model)throw new Error('No detection engine available');
    const raw=await this.model.detect(source as any);this.lastInferenceTimeMs=Math.round(performance.now()-t0);const {w,h}=this.getSize(source);
    const valid=raw.map(p=>{const category=this.mapCategory(p.class);const [x,y,bw,bh]=p.bbox;return category?{category,class_name:p.class,confidence:Number(p.score),bbox:[Math.max(0,Math.min(w,x)),Math.max(0,Math.min(h,y)),Math.max(0,Math.min(w,x+bw)),Math.max(0,Math.min(h,y+bh))] as [number,number,number,number]}:null}).filter((d):d is {category:CategoryType;class_name:string;confidence:number;bbox:[number,number,number,number]}=>!!d&&d.confidence>=threshold&&d.confidence<=1&&d.bbox[2]>d.bbox[0]&&d.bbox[3]>d.bbox[1]);
-   return this.updateSpatialTracker(valid,frameNumber);
+   return this.updateSpatialTracker(valid.filter(d=>d.confidence>=(classThresholds?.[d.category as 'person'|'car'|'bicycle'|'camera']??threshold)),frameNumber);
   }catch(e){this.addLog('Inference error: '+(e instanceof Error?e.message:String(e)));return[];}finally{this.isInferenceRunning=false;}
  }
 
