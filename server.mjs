@@ -23,10 +23,9 @@ app.use('/api',async(req,res,next)=>{
     const response=await fetch(supabaseUrl+'/auth/v1/user',{headers:{apikey:supabasePublishableKey,Authorization:'Bearer '+match[1]}});
     if(!response.ok)return res.status(401).json({error:'Invalid or expired session.'});
     const user=await response.json();
-    const providers=Array.isArray(user?.app_metadata?.providers)?user.app_metadata.providers:[];
-    const primaryProvider=user?.app_metadata?.provider;
-    if(primaryProvider!=='google'&&!providers.includes('google'))return res.status(403).json({error:'Sign in with a Google account to access VisionX.'});
+    const authorizedEmail='abdullahmohamedharoon8@gmail.com';
     if(!user?.id)return res.status(401).json({error:'Invalid session.'});
+    if(String(user.email||'').trim().toLowerCase()!==authorizedEmail)return res.status(403).json({error:'This email is not authorized to access VisionX.'});
     req.authUser={id:user.id,email:user.email||null};
     next();
   }catch(error){console.error('Supabase token verification failed:',error instanceof Error?error.message:'unknown error');return res.status(503).json({error:'Authentication service temporarily unavailable.'});}
