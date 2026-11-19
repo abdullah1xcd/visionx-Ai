@@ -31,7 +31,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>Theme & Visual Appearance</span>
           </h3>
 
-          <div className="grid grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             {(['dark', 'light', 'system'] as const).map((mode) => (
               <button
                 key={mode}
@@ -58,7 +58,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>Object Class Confidence Thresholds</span>
           </h3>
 
-          <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             {/* Person */}
             <div className="space-y-1.5 bg-[#080A0D] p-3 rounded-lg border border-[#252C35]">
               <div className="flex justify-between font-semibold">
