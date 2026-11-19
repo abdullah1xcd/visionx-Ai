@@ -24,9 +24,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
     setLoading(true);
     setMessage('');
     try {
-      if (!navigator.mediaDevices?.enumerateDevices) {
-        throw new Error('Camera discovery requires HTTPS and a supported browser.');
-      }
+      if (!navigator.mediaDevices?.enumerateDevices) throw new Error('Camera discovery requires HTTPS and a supported browser.');
       const available = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
       setDevices(available);
       if (!selectedDevice && available[0]) setSelectedDevice('0');
@@ -42,7 +40,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
 
   const addCamera = () => {
     const deviceIndex = Number(selectedDevice);
-    if (deviceIndex < 0) {
+    if (!selectedDevice || !Number.isInteger(deviceIndex) || deviceIndex < 0 || !devices[deviceIndex]) {
       setMessage('Select an available browser camera first.');
       return;
     }
@@ -63,7 +61,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
     };
     onAddCamera(camera);
     setCameraName('');
-    setMessage('Camera saved in this browser. Select OPEN to start a live session.');
+    setMessage('Camera added to this session. Select OPEN LIVE VIEW to start.');
   };
 
   return (
@@ -87,10 +85,10 @@ export const ProductionCamerasView: React.FC<Props> = ({
               <option value="">Choose a camera</option>
               {devices.map((device, index) => <option key={device.deviceId || index} value={String(index)}>{device.label || `Camera ${index + 1}`}</option>)}
             </select>
-            <button onClick={addCamera} disabled={!selectedDevice} className="px-4 py-3 bg-[#D4AF37] text-black rounded-lg text-xs font-bold disabled:opacity-40"><CheckCircle2 className="inline w-4 h-4 mr-1"/> SAVE CAMERA</button>
+            <button onClick={addCamera} disabled={!selectedDevice} className="px-4 py-3 bg-[#D4AF37] text-black rounded-lg text-xs font-bold disabled:opacity-40"><CheckCircle2 className="inline w-4 h-4 mr-1"/> ADD CAMERA</button>
           </div>
           {message && <p role="status" className="text-xs text-amber-300">{message}</p>}
-          <p className="text-[10px] text-[#68727D] flex items-start gap-2"><ShieldCheck className="w-4 h-4 shrink-0"/>Camera names and device references are stored locally in this browser. No camera credentials are uploaded. RTSP/ONVIF network discovery is intentionally unavailable on the public demo.</p>
+          <p className="text-[10px] text-[#68727D] flex items-start gap-2"><ShieldCheck className="w-4 h-4 shrink-0"/>Camera device references remain in this active session only. No camera credentials are uploaded. IP camera access requires a VisionX camera gateway on the camera's network.</p>
         </section>
 
         <section className="grid md:grid-cols-2 gap-4">
@@ -106,7 +104,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
                 <button onClick={() => onRemoveCamera(camera.id)} className="px-3 py-1.5 rounded border border-[#252C35] text-xs text-rose-400"><Trash2 className="inline w-3 h-3 mr-1"/>REMOVE</button>
               </div>
             </article>
-          )) : <div className="md:col-span-2 bg-[#11161D] border border-[#252C35] rounded-xl p-10 text-center text-[#68727D]"><Camera className="mx-auto w-10 h-10 mb-3"/>No saved browser cameras yet. Add a camera above or use the Live AI Detection page directly.</div>}
+          )) : <div className="md:col-span-2 bg-[#11161D] border border-[#252C35] rounded-xl p-10 text-center text-[#68727D]"><Camera className="mx-auto w-10 h-10 mb-3"/>No cameras added in this session. Add a camera above or use Live AI Detection directly.</div>}
         </section>
       </div>
     </div>
