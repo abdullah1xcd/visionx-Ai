@@ -12,10 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
-MODEL_PATH = os.getenv("VISIONX_MODEL", "yolo26m.pt")
+MODEL_PATH = os.getenv("VISIONX_MODEL", "yolo11n.pt")
 CONF = float(os.getenv("VISIONX_DEFAULT_CONF", "0.35"))
 IOU = float(os.getenv("VISIONX_IOU", "0.50"))
-IMG_SIZE = int(os.getenv("VISIONX_IMG_SIZE", "960"))
+IMG_SIZE = int(os.getenv("VISIONX_IMG_SIZE", "640"))
 DEVICE = os.getenv("VISIONX_DEVICE", "auto")
 
 app = FastAPI(title="VisionX AI Engine", version="2.0.0")
@@ -42,6 +42,7 @@ class DetectionRequest(BaseModel):
     frame_number: int = 0
     confidence: float | None = None
     iou: float | None = None
+    class_thresholds: dict[str, float] | None = None
 
 
 def load_model() -> YOLO:
@@ -152,6 +153,10 @@ def detect(req: DetectionRequest) -> dict[str, Any]:
                 name = str(names[int(cls_id)])
                 category = map_class(name)
                 if category is None:
+                    continue
+                category_threshold = (req.class_thresholds or {}).get(category, conf)
+                category_threshold = max(0.05, min(0.95, float(category_threshold)))
+                if float(score) < category_threshold:
                     continue
                 x1, y1, x2, y2 = box
                 detections.append({
