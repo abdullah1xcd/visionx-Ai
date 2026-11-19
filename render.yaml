@@ -10,9 +10,9 @@ services:
       - key: NODE_VERSION
         value: 22.14.0
       - key: VISIONX_DB_PATH
-        value: /var/data/visionx-public-demo.sqlite
+        value: /var/data/visionx-ai.sqlite
     disk:
-      name: visionx-public-demo-data
+      name: visionx-ai-data
       mountPath: /var/data
       sizeGB: 1
 
