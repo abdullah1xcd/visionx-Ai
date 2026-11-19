@@ -15,41 +15,6 @@ function Dashboard(){
 }
 
 
-import { useEffect as useAuthEffect, useState as useAuthState } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { supabase } from './lib/supabaseClient';
-import AuthScreen from './components/AuthScreen';
-
 export default function App() {
-  const [user, setUser] = useAuthState<User | null>(null);
-  const [authLoading, setAuthLoading] = useAuthState(true);
-
-  useAuthEffect(() => {
-    if (!supabase) {
-      setAuthLoading(false);
-      return;
-    }
-    let mounted = true;
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (!mounted) return;
-      if (error) console.error('Supabase session check failed:', error.message);
-      setUser(data.session?.user ?? null);
-      setAuthLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setUser(session?.user ?? null);
-      setAuthLoading(false);
-    });
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  if (authLoading) {
-    return <div className="min-h-screen bg-[#080A0D] text-white grid place-items-center"><div className="text-sm text-slate-400">Checking secure session…</div></div>;
-  }
-  if (!supabase || !user) return <AuthScreen configurationMissing={!supabase} />;
-  return <div className="relative h-full w-full"><Dashboard /><div className="fixed right-3 top-3 z-[100] flex items-center gap-2 rounded-xl border border-white/10 bg-[#10151d]/95 px-3 py-2 text-xs text-slate-300 shadow-xl backdrop-blur"><span className="max-w-[160px] truncate">{user.email}</span><button className="rounded-lg bg-white/10 px-2.5 py-1.5 font-semibold text-white hover:bg-white/20" onClick={() => void supabase.auth.signOut()}>Sign out</button></div></div>;
+  return <div className="relative h-full w-full"><Dashboard /><div role="status" className="fixed right-3 top-3 z-[100] max-w-[min(92vw,420px)] rounded-xl border border-amber-400/30 bg-[#201b10]/95 px-3 py-2 text-xs text-amber-100 shadow-xl backdrop-blur"><strong className="mr-1">PUBLIC TEST BUILD</strong> Do not enter real camera credentials or sensitive data. Camera network controls are disabled in this public demo.</div></div>;
 }
