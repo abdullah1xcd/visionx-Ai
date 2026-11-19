@@ -23,7 +23,8 @@ class RealDetectionService {
    if(this.aiEngineBaseUrl){
    const r=await fetch(this.aiEngineBaseUrl+'/health',{signal:AbortSignal.timeout(2500)});
    if(r.ok){const data=await r.json();if(data.ok){this.backendAvailable=true;this.deviceName=String(data.device||'CPU');this.engineStatus='ACTIVE';this.statusMessage='YOLO + ByteTrack Active ('+(data.model||'YOLO')+')';this.addLog('Python vision engine ready: '+(data.model||'YOLO')+' on '+(data.device||'CPU')+'.');return true;}}
-  }catch{} }
+   }
+  }catch{}
   try{
    await tf.ready();const backend=tf.getBackend();this.deviceName=backend==='webgl'?'WebGL (GPU Fallback)':backend==='wasm'?'WASM (CPU Fallback)':backend.toUpperCase()+' (CPU Fallback)';
    this.model=await cocoSsd.load({base:'mobilenet_v2'});this.engineStatus='DEGRADED';this.statusMessage='Browser fallback active — install Python AI engine for YOLO accuracy.';this.addLog('Python engine unavailable; using COCO-SSD browser fallback.');return true;
