@@ -4,6 +4,9 @@ const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, 
 const apiUrl = (path: string) => `${API_BASE}${path}`;
 
 const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  if (!API_BASE && !import.meta.env.DEV) {
+    throw new Error('VisionX API is not configured for this deployment. Set VITE_API_BASE_URL to the deployed backend URL.');
+  }
   const url = apiUrl(path);
   let r: Response;
   try {

@@ -10,7 +10,7 @@ type Source=HTMLVideoElement|HTMLCanvasElement|HTMLImageElement;
 type BackendDetection={class_id:number;class_name:string;category:'person'|'car'|'bicycle';confidence:number;x1:number;y1:number;x2:number;y2:number;tracking_id:number};
 
 class RealDetectionService {
- private model:cocoSsd.ObjectDetection|null=null; private isModelLoading=false; private engineStatus:AIEngineStatus='INITIALIZING'; private statusMessage='Initializing VisionX AI Engine...'; private deviceName='Detecting...'; private backendAvailable=false; private nextTrackId=1;
+ private model:cocoSsd.ObjectDetection|null=null; private isModelLoading=false; private engineStatus:AIEngineStatus='INITIALIZING'; private statusMessage='Initializing VisionX AI Engine...'; private deviceName='Detecting...'; private backendAvailable=false; private nextTrackId=1; private readonly aiEngineBaseUrl=(import.meta.env.VITE_AI_ENGINE_URL || (import.meta.env.DEV?'http://127.0.0.1:8000':'')).replace(/\/+$/,'');
  private activeTracks:{id:number;category:CategoryType;bbox:[number,number,number,number];confidence:number;lastSeenFrame:number;hits:number}[]=[];
  private uniqueCategoryTrackIds={person:new Set<number>(),car:new Set<number>(),bicycle:new Set<number>(),camera:new Set<number>()};
  private lastInferenceTimeMs=0; private inferenceFrameTimes:number[]=[]; private diagnosticLogs:string[]=[]; private isInferenceRunning=false;
@@ -20,8 +20,10 @@ class RealDetectionService {
  async initModel(){
   if(this.isModelLoading)return false; this.isModelLoading=true; this.engineStatus='INITIALIZING'; this.addLog('Checking Python YOLO/ByteTrack engine...');
   try{
-   const r=await fetch('http://127.0.0.1:8000/health',{signal:AbortSignal.timeout(2500)});
+   if(this.aiEngineBaseUrl){
+   const r=await fetch(this.aiEngineBaseUrl+'/health',{signal:AbortSignal.timeout(2500)});
    if(r.ok){const data=await r.json();if(data.ok){this.backendAvailable=true;this.deviceName=String(data.device||'CPU');this.engineStatus='ACTIVE';this.statusMessage='YOLO + ByteTrack Active ('+(data.model||'YOLO')+')';this.addLog('Python vision engine ready: '+(data.model||'YOLO')+' on '+(data.device||'CPU')+'.');return true;}}
+   }
   }catch{}
   try{
    await tf.ready();const backend=tf.getBackend();this.deviceName=backend==='webgl'?'WebGL (GPU Fallback)':backend==='wasm'?'WASM (CPU Fallback)':backend.toUpperCase()+' (CPU Fallback)';
@@ -45,7 +47,7 @@ class RealDetectionService {
    if(this.backendAvailable){
     try{
      const payload=await this.sourceToDataUrl(source);
-     const response=await fetch('http://127.0.0.1:8000/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:payload.data,frame_number:frameNumber,confidence:threshold,iou:0.5})});
+     const response=await fetch(this.aiEngineBaseUrl+'/detect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:payload.data,frame_number:frameNumber,confidence:threshold,iou:0.5})});
      if(!response.ok)throw new Error('YOLO backend HTTP '+response.status);
      const data=await response.json() as {detections:BackendDetection[];inference_ms:number;device:string};
      this.lastInferenceTimeMs=Number(data.inference_ms)||Math.round(performance.now()-t0);this.deviceName=String(data.device||this.deviceName);this.engineStatus='ACTIVE';
@@ -75,7 +77,7 @@ class RealDetectionService {
   const counts={person:0,car:0,bicycle:0,camera:0};for(const t of this.activeTracks)counts[t.category]++;const n=this.inferenceFrameTimes.length;const elapsed=n>=2?(this.inferenceFrameTimes[n-1]-this.inferenceFrameTimes[0]):0;const fps=n>=2&&elapsed>0?1000*(n-1)/elapsed:(this.lastInferenceTimeMs>0?1000/this.lastInferenceTimeMs:0);
   return{modelName:this.backendAvailable?'Ultralytics YOLO + ByteTrack':'COCO-SSD MobileNetV2 fallback',modelStatus:this.engineStatus,device:this.deviceName,inputResolution:w+'x'+h,inferenceResolution:'up to 960px',inferenceFps:fps,cameraFps:Number.isFinite(cameraFps)?cameraFps:0,lastInferenceMs:this.lastInferenceTimeMs,totalDetectionsCurrentFrame:this.activeTracks.length,currentCounts:counts,uniqueTrackedCounts:{person:this.uniqueCategoryTrackIds.person.size,car:this.uniqueCategoryTrackIds.car.size,bicycle:this.uniqueCategoryTrackIds.bicycle.size,camera:this.uniqueCategoryTrackIds.camera.size},trackingMethod:this.backendAvailable?'Ultralytics ByteTrack':'IoU spatial fallback',recentLogs:[...this.diagnosticLogs]};
  }
- resetTracking(){this.nextTrackId=1;this.activeTracks=[];Object.values(this.uniqueCategoryTrackIds).forEach(s=>s.clear());fetch('http://127.0.0.1:8000/reset',{method:'POST'}).catch(()=>{});}
+ resetTracking(){this.nextTrackId=1;this.activeTracks=[];Object.values(this.uniqueCategoryTrackIds).forEach(s=>s.clear());if(this.aiEngineBaseUrl)fetch(this.aiEngineBaseUrl+'/reset',{method:'POST'}).catch(()=>{});}
  getQualityStatus():DetectionQualityStatus{return this.engineStatus==='ACTIVE'?'Good':'Poor Visibility';}
  private addLog(m:string){this.diagnosticLogs.push('['+new Date().toLocaleTimeString('en-GB')+'] '+m);if(this.diagnosticLogs.length>30)this.diagnosticLogs.shift();}
 }
