@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: visionx-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: VISIONX_DB_PATH
+        value: /var/data/visionx.sqlite
+      - key: CORS_ORIGINS
+        sync: false
+    disk:
+      name: visionx-sqlite-data
+      mountPath: /var/data
+      sizeGB: 1
+
+  - type: web
+    name: visionx-ai-engine
+    runtime: python
+    rootDir: ai_engine
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: VISIONX_MODEL
+        value: yolo26n.pt
+      - key: VISIONX_IMG_SIZE
+        value: 640
+      - key: VISIONX_DEVICE
+        value: cpu
+      - key: VISIONX_CORS_ORIGINS
+        sync: false
