@@ -10,15 +10,9 @@ services:
       - key: NODE_VERSION
         value: 22.14.0
       - key: VISIONX_DB_PATH
-        value: /var/data/visionx.sqlite
-      - key: CORS_ORIGINS
-        sync: false
-      - key: SUPABASE_URL
-        value: https://yhuahywjnsjrsuzsekqb.supabase.co
-      - key: SUPABASE_PUBLISHABLE_KEY
-        sync: false
+        value: /var/data/visionx-public-demo.sqlite
     disk:
-      name: visionx-sqlite-data
+      name: visionx-public-demo-data
       mountPath: /var/data
       sizeGB: 1
 
