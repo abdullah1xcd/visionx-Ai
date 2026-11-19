@@ -11,18 +11,18 @@ export class VideoAnalysisService{
  public stop(){this.cancelled=true;this.paused=false;this.activeVideo?.pause();const v=this.activeVideo as VideoWithFrameCallback|null;if(v&&this.frameCallbackId!==null)v.cancelVideoFrameCallback?.(this.frameCallbackId);if(this.fallbackRaf!==null)cancelAnimationFrame(this.fallbackRaf);this.frameCallbackId=null;this.fallbackRaf=null;}
  public pause(){this.paused=true;this.activeVideo?.pause();}
  public resume(){this.paused=false;void this.activeVideo?.play().catch(()=>{});}
- public async analyzeVideo(video:HTMLVideoElement,options:{confidenceThreshold?:number;sampleEveryFrames?:number;callbacks?:VideoAnalysisCallbacks}={}):Promise<VideoAnalysisRun>{
+ public async analyzeVideo(video:HTMLVideoElement,options:{confidenceThreshold?:number;classThresholds?:Partial<Record<'person'|'car'|'bicycle'|'camera',number>>;sampleEveryFrames?:number;callbacks?:VideoAnalysisCallbacks}={}):Promise<VideoAnalysisRun>{
   if(this.running)this.stop();this.cancelled=false;this.paused=false;this.running=true;this.activeVideo=video;
-  const threshold=options.confidenceThreshold??.4;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??1));const cb=options.callbacks??{};
+  const threshold=options.confidenceThreshold??.4;const classThresholds=options.classThresholds;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??1));const cb=options.callbacks??{};
   try{
    await this.waitForMetadata(video);await this.waitForFrame(video);
    if(!Number.isFinite(video.duration)||video.duration<=0||!video.videoWidth||!video.videoHeight)throw new Error('The selected video has no usable duration or dimensions.');
    detectionService.resetTracking();if(video.currentTime>0)await this.seek(video,0);video.muted=true;video.playsInline=true;video.playbackRate=1;await video.play();
-   void this.process(video,threshold,sampleEvery,cb);
+   void this.process(video,threshold,classThresholds,sampleEvery,cb);
   }catch(e){this.running=false;this.activeVideo=null;throw e;}
   return{stop:()=>this.stop(),pause:()=>this.pause(),resume:()=>this.resume()};
  }
- private async process(video:HTMLVideoElement,threshold:number,sampleEvery:number,cb:VideoAnalysisCallbacks){
+ private async process(video:HTMLVideoElement,threshold:number,classThresholds:Partial<Record<'person'|'car'|'bicycle'|'camera',number>>|undefined,sampleEvery:number,cb:VideoAnalysisCallbacks){
   const frameVideo=video as VideoWithFrameCallback;let frame=0,lastProgressAt=0,inferenceBusy=false,ended=false,completed=false;
   const finish=()=>{if(completed||this.cancelled)return;completed=true;video.pause();this.running=false;this.activeVideo=null;cb.onProgress?.(100,frame,video.duration);cb.onComplete?.();};
   const maybeFinish=()=>{if(ended&&!inferenceBusy)finish();};
@@ -40,7 +40,7 @@ export class VideoAnalysisService{
    if(currentFrame%sampleEvery===0&&!inferenceBusy&&video.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA){
     const snapshot=document.createElement('canvas');snapshot.width=video.videoWidth;snapshot.height=video.videoHeight;
     const context=snapshot.getContext('2d',{alpha:false});if(context){context.drawImage(video,0,0,snapshot.width,snapshot.height);inferenceBusy=true;
-     void detectionService.detectFrame(snapshot,currentFrame,threshold).then(detections=>{
+     void detectionService.detectFrame(snapshot,currentFrame,threshold,classThresholds).then(detections=>{
       if(this.cancelled)return;const current=emptyCounts();for(const d of detections)current[d.category]++;current.all=detections.length;
       const diag=detectionService.getDiagnostics(video.videoWidth,video.videoHeight,0);const unique={all:diag.uniqueTrackedCounts.person+diag.uniqueTrackedCounts.car+diag.uniqueTrackedCounts.bicycle+diag.uniqueTrackedCounts.camera,person:diag.uniqueTrackedCounts.person,car:diag.uniqueTrackedCounts.car,bicycle:diag.uniqueTrackedCounts.bicycle,camera:diag.uniqueTrackedCounts.camera};
       cb.onFrame?.({frameNumber:currentFrame,timeSeconds:mediaTime,detections,currentCounts:current,uniqueCounts:unique});
