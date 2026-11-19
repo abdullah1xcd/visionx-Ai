@@ -11,6 +11,22 @@ const __dirname=path.dirname(fileURLToPath(import.meta.url));const PORT=Number(p
 const dbPath=process.env.VISIONX_DB_PATH||path.join(__dirname,'visionx.sqlite');const db=new DatabaseSync(dbPath);db.exec(`PRAGMA journal_mode=WAL;CREATE TABLE IF NOT EXISTS cameras(id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL,source TEXT NOT NULL,status TEXT NOT NULL,ai_status TEXT NOT NULL,resolution TEXT NOT NULL,fps REAL NOT NULL,location TEXT NOT NULL,night_vision_type TEXT NOT NULL,last_connected TEXT NOT NULL,manufacturer TEXT,model TEXT,created_at TEXT NOT NULL);CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY,timestamp TEXT NOT NULL,type TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,camera_id TEXT NOT NULL,track_id INTEGER,acknowledged INTEGER NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS video_runs(id TEXT PRIMARY KEY,filename TEXT NOT NULL,duration REAL NOT NULL,status TEXT NOT NULL,progress REAL NOT NULL DEFAULT 0,current_frame INTEGER NOT NULL DEFAULT 0,total_detections INTEGER NOT NULL DEFAULT 0,unique_person INTEGER NOT NULL DEFAULT 0,unique_car INTEGER NOT NULL DEFAULT 0,unique_bicycle INTEGER NOT NULL DEFAULT 0,unique_camera INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);CREATE TABLE IF NOT EXISTS detections(id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT NOT NULL,frame_number INTEGER NOT NULL,time_seconds REAL NOT NULL,category TEXT NOT NULL,confidence REAL NOT NULL,track_id INTEGER NOT NULL,x1 REAL NOT NULL,y1 REAL NOT NULL,x2 REAL NOT NULL,y2 REAL NOT NULL);`);
 const now=()=>new Date().toISOString();const allowedStream=v=>typeof v==='string'&&/^rtsps?:\/\//i.test(v);const jsonError=(res,e)=>res.status(500).json({error:e instanceof Error?e.message:String(e)});const ffmpeg=process.env.FFMPEG_BIN||ffmpegPath||'ffmpeg';
 app.get('/api/health',(_req,res)=>res.json({ok:true,sqlite:true,node:process.version,ffmpeg:ffmpegPath?'bundled':'system',ffmpegPath:ffmpeg}));
+const supabaseUrl=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
+const supabasePublishableKey=process.env.SUPABASE_PUBLISHABLE_KEY;
+app.use('/api',async(req,res,next)=>{
+  if(!supabaseUrl||!supabasePublishableKey)return res.status(503).json({error:'Authentication is not configured on the VisionX API.'});
+  const authorization=req.headers.authorization||'';
+  const match=authorization.match(/^Bearer\s+(.+)$/i);
+  if(!match)return res.status(401).json({error:'Authentication required.'});
+  try{
+    const response=await fetch(supabaseUrl+'/auth/v1/user',{headers:{apikey:supabasePublishableKey,Authorization:'Bearer '+match[1]}});
+    if(!response.ok)return res.status(401).json({error:'Invalid or expired session.'});
+    const user=await response.json();
+    if(!user?.id)return res.status(401).json({error:'Invalid session.'});
+    req.authUser={id:user.id,email:user.email||null};
+    next();
+  }catch(error){console.error('Supabase token verification failed:',error instanceof Error?error.message:'unknown error');return res.status(503).json({error:'Authentication service temporarily unavailable.'});}
+});
 app.get('/api/cameras',(_req,res)=>{try{const rows=db.prepare('SELECT * FROM cameras ORDER BY created_at DESC').all();res.json(rows.map(r=>({...r,aiStatus:r.ai_status,nightVisionType:r.night_vision_type,lastConnected:r.last_connected})));}catch(e){jsonError(res,e)}});
 app.post('/api/cameras',(req,res)=>{try{const c=req.body||{};if(!c.id||!c.name||!c.type)return res.status(400).json({error:'id, name and type are required'});db.prepare(`INSERT OR REPLACE INTO cameras(id,name,type,source,status,ai_status,resolution,fps,location,night_vision_type,last_connected,manufacturer,model,created_at)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(c.id,c.name,c.type,c.source||'',c.status||'Offline',c.aiStatus||'Standby',c.resolution||'N/A',Number(c.fps||0),c.location||'Not configured',c.nightVisionType||'Software Night Vision',c.lastConnected||'Never',c.manufacturer||null,c.model||null,now());res.json({ok:true});}catch(e){jsonError(res,e)}});
 app.delete('/api/cameras/:id',(req,res)=>{try{db.prepare('DELETE FROM cameras WHERE id=?').run(req.params.id);res.json({ok:true})}catch(e){jsonError(res,e)}});
