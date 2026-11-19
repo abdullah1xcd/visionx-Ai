@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { Activity } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -11,7 +12,7 @@ export default function AuthScreen({ configurationMissing = false }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const signIn = async (event: React.FormEvent<HTMLFormElement>) => {
+  const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) return;
     if (email.trim().toLowerCase() !== AUTHORIZED_EMAIL) {

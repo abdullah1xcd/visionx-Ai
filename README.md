@@ -307,3 +307,32 @@ VisionX analytics
 
 The AI engine deliberately maps `car`, `truck`, `bus`, and `motorcycle` into VisionX's `car` category. It does not claim that the default COCO model can detect license plates or physical cameras; those require dedicated models/OCR pipelines.
 
+## 12. Web Application Access and Session Model
+
+The VisionX AI web application opens directly without account registration or a sign-in screen. Each visitor receives an independent, temporary browser session.
+
+### Session behavior
+- Live webcam access is requested by the browser when the visitor starts camera capture. The site must be served over HTTPS (or localhost).
+- Uploaded videos are selected and processed locally in the visitor's browser.
+- Camera selections, alerts, video-analysis summaries, detections, and statistics are held in page memory for the active session.
+- No visitor's session records are shared with another visitor.
+- Reloading or closing the page clears the in-memory session. A new visit starts with empty session statistics and no previously selected cameras.
+- No camera credentials or visitor session records are written to browser local storage by this web session layer.
+
+### Camera connectivity
+- Browser webcams and USB cameras exposed through the browser MediaDevices API can be used after the visitor grants permission.
+- Browser applications cannot play RTSP streams directly. IP-camera streaming requires a VisionX camera gateway running on, or securely connected to, the same network as the IP camera.
+- ONVIF discovery uses local-network discovery protocols and must be performed by that gateway; a public website cannot discover arbitrary cameras on a visitor's private LAN.
+- The web client does not claim IP-camera support until a camera gateway is configured and reachable.
+
+### AI engine and analytics
+- The web client can use its available browser inference pipeline and can use a separately deployed Python YOLO/ByteTrack service when configured.
+- Statistics are calculated from detections generated during the active visitor session. They are not a shared or persistent analytics database.
+- Runtime confidence is not model accuracy. A real accuracy percentage requires evaluation against a labeled dataset.
+
+### Local development
+```bash
+npm install
+npm run dev
+```
+The application can be opened at `http://localhost:3000`. Browser camera access is available on localhost or HTTPS.

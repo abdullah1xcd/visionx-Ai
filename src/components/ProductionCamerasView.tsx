@@ -1,12 +1,112 @@
-import React,{useState}from'react';
-import{Camera,Plus,Trash2,Wifi,Bluetooth,Video,CheckCircle2,Search}from'lucide-react';
-import{CameraSourceItem}from'../types';
-import{persistenceService}from'../services/persistenceService';
-interface Props{cameras:CameraSourceItem[];activeCameraId:string;onSelectCamera:(id:string)=>void;onAddCamera:(cam:CameraSourceItem)=>void;onRemoveCamera:(id:string)=>void;onReconnectCamera:(id:string)=>void;}
-type Tab='webcam'|'usb'|'wifi_ip'|'rtsp'|'onvif'|'bluetooth';
-export const ProductionCamerasView:React.FC<Props>=({cameras,activeCameraId,onSelectCamera,onAddCamera,onRemoveCamera})=>{const[open,setOpen]=useState(false),[tab,setTab]=useState<Tab>('webcam'),[name,setName]=useState(''),[index,setIndex]=useState('0'),[source,setSource]=useState(''),[message,setMessage]=useState(''),[discovering,setDiscovering]=useState(false),[devices,setDevices]=useState<any[]>([]);
- const add=()=>{if((tab==='wifi_ip'||tab==='rtsp')&&!/^rtsps?:\/\//i.test(source.trim())){setMessage('For actual network video, enter an rtsp:// or rtsps:// URL.');return;}const id=`CAM-${crypto.randomUUID().slice(0,8).toUpperCase()}`;const cam:CameraSourceItem={id,name:name||`Camera ${id}`,type:tab,source:tab==='webcam'||tab==='usb'?`Device ${index}`:source.trim(),status:'Offline',aiStatus:'Standby',resolution:'Unknown',fps:0,location:'Not configured',nightVisionType:'Software Night Vision',lastConnected:'Never'};onAddCamera(cam);setOpen(false);setMessage('');setName('');setSource('');};
- const discoverOnvif=async()=>{setDiscovering(true);setMessage('Searching the local network with ONVIF WS-Discovery…');try{const d=await persistenceService.discoverOnvif();setDevices(d);setMessage(d.length?`Found ${d.length} ONVIF device(s). Copy an XAddr/stream URI into the source field after configuring the camera.`:'No ONVIF devices responded.');}catch{setMessage('ONVIF discovery requires the VisionX server.');}finally{setDiscovering(false);}};
- const discoverBluetooth=async()=>{const bt=(navigator as any).bluetooth;if(!bt){setMessage('Web Bluetooth is not supported by this browser. Use a supported Chromium browser over HTTPS/localhost.');return;}try{setMessage('Choose a Bluetooth device in the browser dialog…');const d=await bt.requestDevice({acceptAllDevices:true});setDevices([{name:d.name||'Bluetooth device',id:d.id,device:d}]);setMessage(`Discovered ${d.name||'Bluetooth device'}. Video is only possible if the device exposes a browser-compatible video transport; standard BLE GATT is control/data, not generic camera video.`);}catch(e){setMessage(e instanceof Error?e.message:'Bluetooth discovery cancelled.');}};
- return <div className="flex-1 min-w-0 overflow-y-auto bg-[#080A0D] text-white p-3 sm:p-6 pb-24 md:pb-6"><div className="max-w-6xl mx-auto space-y-6"><header className="flex flex-wrap justify-between items-center gap-3"><div><h2 className="text-xl font-black tracking-wider">CAMERA MANAGEMENT</h2><p className="text-xs text-[#9AA4AF] mt-1">Sources are persisted in SQLite. Network video is bridged through the local FFmpeg server.</p></div><button onClick={()=>setOpen(true)} className="px-4 py-2 bg-[#D4AF37] text-black rounded-lg text-xs font-bold"><Plus className="inline w-4 h-4 mr-1"/>ADD CAMERA</button></header><div className="grid md:grid-cols-2 gap-4">{cameras.length?cameras.map(c=><div key={c.id} className={`bg-[#11161D] border rounded-xl p-5 ${c.id===activeCameraId?'border-[#D4AF37]':'border-[#252C35]'}`}><div className="flex justify-between"><div className="flex gap-3"><Video className="w-5 h-5 text-[#D4AF37]"/><div><b>{c.name}</b><div className="text-[10px] text-[#9AA4AF]">{c.id} • {c.type} • {c.resolution} • {c.fps||'N/A'} FPS</div></div></div><span className="text-[10px] font-bold text-[#9AA4AF]">{c.status.toUpperCase()}</span></div><div className="mt-3 text-[10px] font-mono text-[#68727D] truncate">{c.source}</div><div className="mt-4 flex gap-2"><button onClick={()=>onSelectCamera(c.id)} className="px-3 py-1.5 rounded border border-[#D4AF37]/50 text-xs">OPEN</button><button onClick={()=>onRemoveCamera(c.id)} className="px-3 py-1.5 rounded border border-[#252C35] text-xs text-rose-400"><Trash2 className="inline w-3 h-3 mr-1"/>REMOVE</button></div></div>):<div className="md:col-span-2 bg-[#11161D] border border-[#252C35] rounded-xl p-10 text-center text-[#68727D]"><Camera className="mx-auto w-10 h-10 mb-3"/>No camera sources configured.</div>}</div></div>{open&&<div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-3 sm:p-6"><div className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto bg-[#11161D] border border-[#252C35] rounded-xl p-4 sm:p-6"><div className="flex justify-between"><h3 className="font-black">ADD REAL CAMERA SOURCE</h3><button onClick={()=>setOpen(false)}>✕</button></div><div className="grid grid-cols-3 md:grid-cols-6 gap-1 mt-5">{(['webcam','usb','wifi_ip','rtsp','onvif','bluetooth'] as Tab[]).map(t=><button key={t} onClick={()=>{setTab(t);setMessage('');setDevices([])}} className={`p-2 rounded text-[9px] uppercase border ${tab===t?'border-[#D4AF37]':'border-[#252C35]'}`}>{t.replace('_',' ')}</button>)}</div><input value={name} onChange={e=>setName(e.target.value)} placeholder="Camera name" className="w-full mt-4 p-3 bg-[#080A0D] border border-[#252C35] rounded text-xs"/>{(tab==='webcam'||tab==='usb')?<input value={index} onChange={e=>setIndex(e.target.value)} placeholder="Device index" className="w-full mt-2 p-3 bg-[#080A0D] border border-[#252C35] rounded text-xs"/>:<input value={source} onChange={e=>setSource(e.target.value)} placeholder={tab==='rtsp'||tab==='wifi_ip'?'rtsp://user:password@camera/stream':tab==='onvif'?'Optional ONVIF XAddr / RTSP URI':'Optional device label'} className="w-full mt-2 p-3 bg-[#080A0D] border border-[#252C35] rounded text-xs"/>}<div className="flex gap-2 mt-3">{tab==='onvif'&&<button onClick={discoverOnvif} disabled={discovering} className="px-3 py-2 border border-[#252C35] rounded text-xs"><Search className="inline w-3 h-3 mr-1"/>{discovering?'SEARCHING…':'DISCOVER ONVIF'}</button>}{tab==='bluetooth'&&<button onClick={discoverBluetooth} className="px-3 py-2 border border-[#252C35] rounded text-xs"><Bluetooth className="inline w-3 h-3 mr-1"/>DISCOVER BLUETOOTH</button>}</div>{devices.length>0&&<div className="mt-3 p-3 bg-[#080A0D] rounded border border-[#252C35] text-[10px] space-y-2">{devices.map((d,i)=><div key={i} className="border-b border-[#252C35] pb-2">{d.name||'ONVIF device'} {d.id&&<span className="text-[#68727D]">• {d.id}</span>}<div className="text-[#68727D] break-all">{d.xaddrs?.join(' ')||d.scopes?.join(' ')||'Discovered device'}</div></div>)}</div>}<p className="text-[10px] text-[#68727D] mt-3"><Wifi className="inline w-3 h-3 mr-1"/>RTSP streaming needs FFmpeg installed on the VisionX host. <Bluetooth className="inline w-3 h-3 mx-1"/>Bluetooth discovery/control is supported where the browser exposes Web Bluetooth; generic Bluetooth camera video is not a standard browser capability.</p>{message&&<p className="text-xs text-amber-300 mt-3">{message}</p>}<button onClick={add} className="w-full mt-5 p-3 bg-[#D4AF37] text-black rounded font-bold text-xs"><CheckCircle2 className="inline w-4 h-4 mr-1"/>SAVE SOURCE</button></div></div>}</div>;
+import React, { useEffect, useState } from 'react';
+import { Camera, Plus, Trash2, Video, CheckCircle2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { CameraSourceItem } from '../types';
+
+interface Props {
+  cameras: CameraSourceItem[];
+  activeCameraId: string;
+  onSelectCamera: (id: string) => void;
+  onAddCamera: (camera: CameraSourceItem) => void;
+  onRemoveCamera: (id: string) => void;
+  onReconnectCamera: (id: string) => void;
+}
+
+export const ProductionCamerasView: React.FC<Props> = ({
+  cameras, activeCameraId, onSelectCamera, onAddCamera, onRemoveCamera,
+}) => {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState('');
+  const [cameraName, setCameraName] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const refreshDevices = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) throw new Error('Camera discovery requires HTTPS and a supported browser.');
+      const available = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
+      setDevices(available);
+      if (!selectedDevice && available[0]) setSelectedDevice('0');
+      if (!available.length) setMessage('No camera is currently visible to this browser. Allow camera permission from the Live AI Detection page, then refresh.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to list browser cameras.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void refreshDevices(); }, []);
+
+  const addCamera = () => {
+    const deviceIndex = Number(selectedDevice);
+    if (!selectedDevice || !Number.isInteger(deviceIndex) || deviceIndex < 0 || !devices[deviceIndex]) {
+      setMessage('Select an available browser camera first.');
+      return;
+    }
+    const device = devices[deviceIndex];
+    const id = `CAM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const camera: CameraSourceItem = {
+      id,
+      name: cameraName.trim() || device.label || `Browser Camera ${deviceIndex + 1}`,
+      type: deviceIndex === 0 ? 'webcam' : 'usb',
+      source: device.deviceId ? `device:${device.deviceId}` : 'default',
+      status: 'Offline',
+      aiStatus: 'Standby',
+      resolution: 'Browser camera',
+      fps: 0,
+      location: 'This device',
+      nightVisionType: 'Software Night Vision',
+      lastConnected: 'Never',
+    };
+    onAddCamera(camera);
+    setCameraName('');
+    setMessage('Camera added to this session. Select OPEN LIVE VIEW to start.');
+  };
+
+  return (
+    <div className="flex-1 min-w-0 overflow-y-auto bg-[#080A0D] text-white p-3 sm:p-6 pb-24 md:pb-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <header className="flex flex-wrap justify-between items-center gap-3">
+          <div>
+            <h2 className="text-xl font-black tracking-wider">CAMERA MANAGEMENT</h2>
+            <p className="text-xs text-[#9AA4AF] mt-1">Connect cameras available to this browser. Camera permission is requested only when you start a live session.</p>
+          </div>
+          <button onClick={() => void refreshDevices()} disabled={loading} className="px-4 py-2 border border-[#D4AF37]/50 rounded-lg text-xs font-bold disabled:opacity-50">
+            <RefreshCw className={`inline w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> REFRESH DEVICES
+          </button>
+        </header>
+
+        <section className="bg-[#11161D] border border-[#252C35] rounded-xl p-4 sm:p-5 space-y-3">
+          <div className="flex items-center gap-2 text-[#D4AF37]"><Plus className="w-4 h-4"/><h3 className="text-sm font-bold">ADD A BROWSER CAMERA</h3></div>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+            <input value={cameraName} onChange={event => setCameraName(event.target.value)} placeholder="Camera name (optional)" className="min-w-0 p-3 bg-[#080A0D] border border-[#252C35] rounded-lg text-xs"/>
+            <select value={selectedDevice} onChange={event => setSelectedDevice(event.target.value)} className="min-w-0 p-3 bg-[#080A0D] border border-[#252C35] rounded-lg text-xs text-white">
+              <option value="">Choose a camera</option>
+              {devices.map((device, index) => <option key={device.deviceId || index} value={String(index)}>{device.label || `Camera ${index + 1}`}</option>)}
+            </select>
+            <button onClick={addCamera} disabled={!selectedDevice} className="px-4 py-3 bg-[#D4AF37] text-black rounded-lg text-xs font-bold disabled:opacity-40"><CheckCircle2 className="inline w-4 h-4 mr-1"/> ADD CAMERA</button>
+          </div>
+          {message && <p role="status" className="text-xs text-amber-300">{message}</p>}
+          <p className="text-[10px] text-[#68727D] flex items-start gap-2"><ShieldCheck className="w-4 h-4 shrink-0"/>Camera device references remain in this active session only. No camera credentials are uploaded. IP camera access requires a VisionX camera gateway on the camera's network.</p>
+        </section>
+
+        <section className="grid md:grid-cols-2 gap-4">
+          {cameras.length ? cameras.map(camera => (
+            <article key={camera.id} className={`bg-[#11161D] border rounded-xl p-5 ${camera.id === activeCameraId ? 'border-[#D4AF37]' : 'border-[#252C35]'}`}>
+              <div className="flex justify-between gap-3">
+                <div className="flex gap-3 min-w-0"><Video className="w-5 h-5 text-[#D4AF37] shrink-0"/><div className="min-w-0"><b className="block truncate">{camera.name}</b><div className="text-[10px] text-[#9AA4AF]">{camera.id} • {camera.type} • {camera.resolution}</div></div></div>
+                <span className="text-[10px] font-bold text-[#9AA4AF]">{camera.status.toUpperCase()}</span>
+              </div>
+              <div className="mt-3 text-[10px] font-mono text-[#68727D]">{camera.location}</div>
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => onSelectCamera(camera.id)} className="px-3 py-1.5 rounded border border-[#D4AF37]/50 text-xs">OPEN LIVE VIEW</button>
+                <button onClick={() => onRemoveCamera(camera.id)} className="px-3 py-1.5 rounded border border-[#252C35] text-xs text-rose-400"><Trash2 className="inline w-3 h-3 mr-1"/>REMOVE</button>
+              </div>
+            </article>
+          )) : <div className="md:col-span-2 bg-[#11161D] border border-[#252C35] rounded-xl p-10 text-center text-[#68727D]"><Camera className="mx-auto w-10 h-10 mb-3"/>No cameras added in this session. Add a camera above or use Live AI Detection directly.</div>}
+        </section>
+      </div>
+    </div>
+  );
 };
