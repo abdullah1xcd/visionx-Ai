@@ -102,7 +102,7 @@ export function analyzeDetection(
     {speedKmh:null,calibrated:false,reason:'Speed requires camera calibration and stable multi-frame tracking.'};
 
   const color=source?estimateCropColor(source,[d.x1,d.y1,d.x2,d.y2],cat as 'person'|'car'|'bicycle'|'camera'):{color:'Unknown',confidence:0};
-  const width=d.x2-d.x1,height=d.y2-d.y1,aspect=height/Math.max(1,width);
+  const width=d.x2-d.x1,height=d.y2-d.y1;
 
   let activity='Detected',posture='Not reliably determined';
   if(cat==='person'){
