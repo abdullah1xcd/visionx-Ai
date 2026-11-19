@@ -1,25 +1,27 @@
 import { CameraSourceItem, SystemAlert, VideoAnalysisStats } from '../types';
+import { supabase } from '../lib/supabaseClient';
 
 const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${API_BASE}${path}`;
 
 const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  if (!API_BASE && !import.meta.env.DEV) {
-    throw new Error('VisionX API is not configured for this deployment. Set VITE_API_BASE_URL to the deployed backend URL.');
-  }
+  if (!API_BASE && !import.meta.env.DEV) throw new Error('VisionX API is not configured. Set VITE_API_BASE_URL.');
+  if (!supabase) throw new Error('Supabase Auth is not configured.');
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.access_token) throw new Error('Your session has expired. Please sign in again.');
   const url = apiUrl(path);
   let r: Response;
   try {
     r = await fetch(url, {
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
       ...init,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...(init?.headers || {}) },
     });
   } catch {
-    throw new Error(
-      API_BASE
-        ? `VisionX backend is unreachable at ${API_BASE}.`
-        : 'VisionX backend is not configured for this deployment. Set VITE_API_BASE_URL to the deployed VisionX API.'
-    );
+    throw new Error(API_BASE ? `VisionX backend is unreachable at ${API_BASE}.` : 'VisionX backend is not reachable.');
+  }
+  if (r.status === 401) {
+    await supabase.auth.signOut();
+    throw new Error('Your session is invalid. Please sign in again.');
   }
   if (!r.ok) {
     const body = await r.text().catch(() => '');
@@ -42,21 +44,12 @@ export const persistenceService = {
   updateVideoRun: (id: string, payload: Record<string, unknown>) => api(`/api/video-runs/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   saveDetections: (id: string, items: unknown[]) => {
     if (!items.length) return Promise.resolve({ ok: true });
-    const task = detectionQueue.then(() => api<{ ok: boolean }>(`/api/video-runs/${encodeURIComponent(id)}/detections`, {
-      method: 'POST',
-      body: JSON.stringify({ items }),
-    }));
+    const task = detectionQueue.then(() => api<{ ok: boolean }>(`/api/video-runs/${encodeURIComponent(id)}/detections`, { method: 'POST', body: JSON.stringify({ items }) }));
     detectionQueue = task.then(() => undefined, () => undefined);
     return task;
   },
   flushDetections: () => detectionQueue,
-  statistics: () => api<{
-    totals: { category: string; count: number }[];
-    unique: { category: string; count: number }[];
-    videos: number;
-    processing?: number;
-    cameras: number;
-  }>('/api/statistics'),
+  statistics: () => api<{ totals: { category: string; count: number }[]; unique: { category: string; count: number }[]; videos: number; processing?: number; cameras: number }>('/api/statistics'),
 };
 
 export type PersistedVideoSummary = {
@@ -65,15 +58,10 @@ export type PersistedVideoSummary = {
   created_at: string; updated_at: string;
 };
 
-export const persistVideoCompletion = (
-  id: string, _filename: string, _duration: number, stats: VideoAnalysisStats
-) => persistenceService.updateVideoRun(id, {
-  status: 'COMPLETED',
-  progress: 100,
-  currentFrame: 0,
-  totalDetections: Object.values(stats.totalDetections).reduce((a, b) => a + b, 0),
-  uniquePerson: stats.uniqueObjects.person,
-  uniqueCar: stats.uniqueObjects.car,
-  uniqueBicycle: stats.uniqueObjects.bicycle,
-  uniqueCamera: stats.uniqueObjects.camera,
-});
+export const persistVideoCompletion = (id: string, _filename: string, _duration: number, stats: VideoAnalysisStats) =>
+  persistenceService.updateVideoRun(id, {
+    status: 'COMPLETED', progress: 100, currentFrame: 0,
+    totalDetections: Object.values(stats.totalDetections).reduce((a, b) => a + b, 0),
+    uniquePerson: stats.uniqueObjects.person, uniqueCar: stats.uniqueObjects.car,
+    uniqueBicycle: stats.uniqueObjects.bicycle, uniqueCamera: stats.uniqueObjects.camera,
+  });
