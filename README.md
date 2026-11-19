@@ -307,3 +307,26 @@ VisionX analytics
 
 The AI engine deliberately maps `car`, `truck`, `bus`, and `motorcycle` into VisionX's `car` category. It does not claim that the default COCO model can detect license plates or physical cameras; those require dedicated models/OCR pipelines.
 
+## 12. Public University Demo (No Login)
+
+The `feat/public-demo-no-login` branch is configured as a public, no-account demo. Visitors open the website directly; no email, password, or Supabase session is required.
+
+### Public demo capabilities
+- Live object detection from a webcam available to the visitor's browser (HTTPS camera permission required).
+- Upload and analyze local video files in the browser.
+- Detection overlays, object tracking, video reports, image enhancement, and OCR tools supported by the selected browser AI pipeline.
+- Camera profiles, alerts, settings, and analysis statistics are saved in the visitor's browser storage.
+
+### Public demo boundaries
+- Browser storage is local to each visitor/device. It is not a shared multi-user database and clearing browser data removes the saved demo records.
+- The browser fallback uses COCO-SSD; supported common classes include people, cars/vehicles, and bicycles. It does not provide a verified camera-object detector or claim a measured accuracy percentage.
+- RTSP/IP camera streaming and ONVIF network discovery are disabled on the public website. Use a local/private VisionX installation for cameras on a LAN; never publish RTSP credentials.
+- The Python YOLO/ByteTrack engine is optional and is not required for the browser-only demo. To use it in a hosted environment, deploy it separately and configure `VITE_AI_ENGINE_URL` with the public HTTPS API URL and matching CORS origins.
+- A shared database or hosted Python inference service requires separately provisioned backend resources. Do not connect a public demo to production camera records or secrets.
+
+### Local development
+```bash
+npm install
+npm run dev
+```
+The app can be opened at `http://localhost:3000`. Browser camera access is available on localhost or HTTPS.
