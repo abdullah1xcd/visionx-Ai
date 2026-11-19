@@ -11,18 +11,17 @@ const __dirname=path.dirname(fileURLToPath(import.meta.url));const PORT=Number(p
 const dbPath=process.env.VISIONX_DB_PATH||path.join(__dirname,'visionx-public-demo.sqlite');const db=new DatabaseSync(dbPath);db.exec(`PRAGMA journal_mode=WAL;CREATE TABLE IF NOT EXISTS cameras(id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL,source TEXT NOT NULL,status TEXT NOT NULL,ai_status TEXT NOT NULL,resolution TEXT NOT NULL,fps REAL NOT NULL,location TEXT NOT NULL,night_vision_type TEXT NOT NULL,last_connected TEXT NOT NULL,manufacturer TEXT,model TEXT,created_at TEXT NOT NULL);CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY,timestamp TEXT NOT NULL,type TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,camera_id TEXT NOT NULL,track_id INTEGER,acknowledged INTEGER NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS video_runs(id TEXT PRIMARY KEY,filename TEXT NOT NULL,duration REAL NOT NULL,status TEXT NOT NULL,progress REAL NOT NULL DEFAULT 0,current_frame INTEGER NOT NULL DEFAULT 0,total_detections INTEGER NOT NULL DEFAULT 0,unique_person INTEGER NOT NULL DEFAULT 0,unique_car INTEGER NOT NULL DEFAULT 0,unique_bicycle INTEGER NOT NULL DEFAULT 0,unique_camera INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);CREATE TABLE IF NOT EXISTS detections(id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT NOT NULL,frame_number INTEGER NOT NULL,time_seconds REAL NOT NULL,category TEXT NOT NULL,confidence REAL NOT NULL,track_id INTEGER NOT NULL,x1 REAL NOT NULL,y1 REAL NOT NULL,x2 REAL NOT NULL,y2 REAL NOT NULL);`);
 const now=()=>new Date().toISOString();const allowedStream=v=>typeof v==='string'&&/^rtsps?:\/\//i.test(v);const streamTickets=new Map();const jsonError=(res,e)=>res.status(500).json({error:e instanceof Error?e.message:String(e)});const ffmpeg=process.env.FFMPEG_BIN||ffmpegPath||'ffmpeg';
 app.get('/api/health',(_req,res)=>res.json({ok:true,sqlite:true,node:process.version,ffmpeg:ffmpegPath?'bundled':'system',ffmpegPath:ffmpeg}));
-// Public demo: camera network access is intentionally disabled. Never expose RTSP/ONVIF
-// endpoints or stored camera source URLs on an unauthenticated public deployment.
+// Camera network endpoints remain unavailable until a VisionX gateway is configured on the camera network.
 app.use('/api', (req,res,next) => {
   if (req.path === '/stream' || req.path === '/stream-ticket' ||
       req.path === '/onvif/discover' || req.path === '/cameras' ||
       req.path.startsWith('/cameras/')) {
-    return res.status(403).json({ error: 'Camera and network controls are disabled in the public demo.' });
+    return res.status(403).json({ error: 'Camera network access is not configured for this deployment.' });
   }
   next();
 });
 
-// Basic per-IP request throttling for the unauthenticated demo API.
+// Basic per-IP request throttling for the unauthenticated web API.
 const rateBuckets = new Map();
 app.use('/api', (req,res,next) => {
   const key = req.ip || req.socket.remoteAddress || 'unknown';
