@@ -1,5 +1,3 @@
-import * as tf from '@tensorflow/tfjs';
-import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { CategoryType, DetectionQualityStatus } from '../types';
 
 export interface DetectionResult { class_id:number; class_name:string; category:CategoryType; confidence:number; x1:number; y1:number; x2:number; y2:number; tracking_id:number; timestamp:string; frame_number:number; }
@@ -10,7 +8,7 @@ type Source=HTMLVideoElement|HTMLCanvasElement|HTMLImageElement;
 type BackendDetection={class_id:number;class_name:string;category:'person'|'car'|'bicycle';confidence:number;x1:number;y1:number;x2:number;y2:number;tracking_id:number};
 
 class RealDetectionService {
- private model:cocoSsd.ObjectDetection|null=null; private isModelLoading=false; private engineStatus:AIEngineStatus='INITIALIZING'; private statusMessage='Initializing VisionX AI Engine...'; private deviceName='Detecting...'; private backendAvailable=false; private nextTrackId=1; private readonly aiEngineBaseUrl=(import.meta.env.VITE_AI_ENGINE_URL || (import.meta.env.DEV?'http://127.0.0.1:8000':'')).replace(/\/+$/,'');
+ private model:import('@tensorflow-models/coco-ssd').ObjectDetection|null=null; private isModelLoading=false; private engineStatus:AIEngineStatus='INITIALIZING'; private statusMessage='Initializing VisionX AI Engine...'; private deviceName='Detecting...'; private backendAvailable=false; private nextTrackId=1; private readonly aiEngineBaseUrl=(import.meta.env.VITE_AI_ENGINE_URL || (import.meta.env.DEV?'http://127.0.0.1:8000':'')).replace(/\/+$/,'');
  private activeTracks:{id:number;category:CategoryType;bbox:[number,number,number,number];confidence:number;lastSeenFrame:number;hits:number}[]=[];
  private uniqueCategoryTrackIds={person:new Set<number>(),car:new Set<number>(),bicycle:new Set<number>(),camera:new Set<number>()};
  private lastInferenceTimeMs=0; private inferenceFrameTimes:number[]=[]; private diagnosticLogs:string[]=[]; private isInferenceRunning=false;
@@ -26,7 +24,7 @@ class RealDetectionService {
    }
   }catch{}
   try{
-   await tf.ready();const backend=tf.getBackend();this.deviceName=backend==='webgl'?'WebGL (GPU Fallback)':backend==='wasm'?'WASM (CPU Fallback)':backend.toUpperCase()+' (CPU Fallback)';
+   const [tf,cocoSsd]=await Promise.all([import('@tensorflow/tfjs'),import('@tensorflow-models/coco-ssd')]);await tf.ready();const backend=tf.getBackend();this.deviceName=backend==='webgl'?'WebGL (GPU Fallback)':backend==='wasm'?'WASM (CPU Fallback)':backend.toUpperCase()+' (CPU Fallback)';
    this.model=await cocoSsd.load({base:'mobilenet_v2'});this.engineStatus='DEGRADED';this.statusMessage='Browser fallback active — install Python AI engine for YOLO accuracy.';this.addLog('Python engine unavailable; using COCO-SSD browser fallback.');return true;
   }catch(e:any){this.engineStatus='ERROR';this.statusMessage='Model Load Error: '+(e?.message||'Failed');this.addLog('FATAL: '+this.statusMessage);return false;}
   finally{this.isModelLoading=false;}
