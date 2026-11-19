@@ -1,7 +1,7 @@
 import { detectionService, DetectionResult } from './detectionService';
 import { CategoryType, VideoAnalysisStats, VideoQualityMetrics, TrackedVideoObject, VideoTimelineEvent } from '../types';
 export interface VideoAnalysisSnapshot{frameNumber:number;timeSeconds:number;detections:DetectionResult[];currentCounts:Record<CategoryType,number>;uniqueCounts:Record<CategoryType,number>}
-export interface VideoAnalysisCallbacks{onFrame?:(s:VideoAnalysisSnapshot)=>void;onProgress?:(p:number,f:number,t:number)=>void;onError?:(e:Error)=>void;onComplete?:()=>void}
+export interface VideoAnalysisCallbacks{onFrame?:(s:VideoAnalysisSnapshot)=>void;onProgress?:(p:number,f:number,t:number)=>void;onError?:(e:Error)=>void;onComplete?:()=>void|Promise<void>}
 export interface VideoAnalysisRun{stop:()=>void;pause:()=>void;resume:()=>void}
 type VideoFrameMetadata={mediaTime:number;presentedFrames:number;expectedDisplayTime:number;width:number;height:number};
 type VideoWithFrameCallback=HTMLVideoElement&{requestVideoFrameCallback?:(callback:(now:number,metadata:VideoFrameMetadata)=>void)=>number;cancelVideoFrameCallback?:(id:number)=>void};
@@ -24,7 +24,7 @@ export class VideoAnalysisService{
  }
  private async process(video:HTMLVideoElement,threshold:number,classThresholds:Partial<Record<'person'|'car'|'bicycle'|'camera',number>>|undefined,sampleEvery:number,cb:VideoAnalysisCallbacks){
   const frameVideo=video as VideoWithFrameCallback;let frame=0,lastProgressAt=0,inferenceBusy=false,ended=false,completed=false;
-  const finish=()=>{if(completed||this.cancelled)return;completed=true;video.pause();this.running=false;this.activeVideo=null;cb.onProgress?.(100,frame,video.duration);cb.onComplete?.();};
+  const finish=()=>{if(completed||this.cancelled)return;completed=true;video.pause();this.running=false;this.activeVideo=null;cb.onProgress?.(100,frame,video.duration);void Promise.resolve(cb.onComplete?.()).catch(e=>cb.onError?.(e instanceof Error?e:new Error(String(e))));};
   const maybeFinish=()=>{if(ended&&!inferenceBusy)finish();};
   const onEnded=()=>{ended=true;maybeFinish();};
   video.addEventListener('ended',onEnded,{once:true});
@@ -39,12 +39,12 @@ export class VideoAnalysisService{
    const currentFrame=frame++;
    if(currentFrame%sampleEvery===0&&!inferenceBusy&&video.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA){
     const snapshot=document.createElement('canvas');snapshot.width=video.videoWidth;snapshot.height=video.videoHeight;
-    const context=snapshot.getContext('2d',{alpha:false});if(context){context.drawImage(video,0,0,snapshot.width,snapshot.height);inferenceBusy=true;
+    const context=snapshot.getContext('2d',{alpha:false});if(context){context.drawImage(video,0,0,snapshot.width,snapshot.height);inferenceBusy=true;video.pause();
      void detectionService.detectFrame(snapshot,currentFrame,threshold,classThresholds).then(detections=>{
       if(this.cancelled)return;const current=emptyCounts();for(const d of detections)current[d.category]++;current.all=detections.length;
       const diag=detectionService.getDiagnostics(video.videoWidth,video.videoHeight,0);const unique={all:diag.uniqueTrackedCounts.person+diag.uniqueTrackedCounts.car+diag.uniqueTrackedCounts.bicycle+diag.uniqueTrackedCounts.camera,person:diag.uniqueTrackedCounts.person,car:diag.uniqueTrackedCounts.car,bicycle:diag.uniqueTrackedCounts.bicycle,camera:diag.uniqueTrackedCounts.camera};
       cb.onFrame?.({frameNumber:currentFrame,timeSeconds:mediaTime,detections,currentCounts:current,uniqueCounts:unique});
-     }).catch(e=>{if(!this.cancelled)cb.onError?.(e instanceof Error?e:new Error(String(e)));}).finally(()=>{inferenceBusy=false;maybeFinish();});
+     }).catch(e=>{if(!this.cancelled)cb.onError?.(e instanceof Error?e:new Error(String(e)));}).finally(()=>{inferenceBusy=false;if(!this.cancelled&&!ended&&!video.ended)void video.play().catch(e=>cb.onError?.(e instanceof Error?e:new Error(String(e))));maybeFinish();});
     }
    }
    if(now-lastProgressAt>=200){lastProgressAt=now;cb.onProgress?.(Math.min(100,mediaTime/video.duration*100),currentFrame,mediaTime);}
