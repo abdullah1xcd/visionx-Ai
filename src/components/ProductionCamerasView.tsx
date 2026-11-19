@@ -41,7 +41,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
   useEffect(() => { void refreshDevices(); }, []);
 
   const addCamera = () => {
-    const deviceIndex = devices.findIndex(device => device.deviceId === selectedDevice);
+    const deviceIndex = Number(selectedDevice);
     if (deviceIndex < 0) {
       setMessage('Select an available browser camera first.');
       return;
@@ -52,7 +52,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
       id,
       name: cameraName.trim() || device.label || `Browser Camera ${deviceIndex + 1}`,
       type: deviceIndex === 0 ? 'webcam' : 'usb',
-      source: `Device ${deviceIndex}`,
+      source: device.deviceId ? `device:${device.deviceId}` : 'default',
       status: 'Offline',
       aiStatus: 'Standby',
       resolution: 'Browser camera',
@@ -85,7 +85,7 @@ export const ProductionCamerasView: React.FC<Props> = ({
             <input value={cameraName} onChange={event => setCameraName(event.target.value)} placeholder="Camera name (optional)" className="min-w-0 p-3 bg-[#080A0D] border border-[#252C35] rounded-lg text-xs"/>
             <select value={selectedDevice} onChange={event => setSelectedDevice(event.target.value)} className="min-w-0 p-3 bg-[#080A0D] border border-[#252C35] rounded-lg text-xs text-white">
               <option value="">Choose a camera</option>
-              {devices.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Camera ${index + 1}`}</option>)}
+              {devices.map((device, index) => <option key={device.deviceId || index} value={String(index)}>{device.label || `Camera ${index + 1}`}</option>)}
             </select>
             <button onClick={addCamera} disabled={!selectedDevice} className="px-4 py-3 bg-[#D4AF37] text-black rounded-lg text-xs font-bold disabled:opacity-40"><CheckCircle2 className="inline w-4 h-4 mr-1"/> SAVE CAMERA</button>
           </div>
