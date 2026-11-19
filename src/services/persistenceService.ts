@@ -1,27 +1,19 @@
 import { CameraSourceItem, SystemAlert, VideoAnalysisStats } from '../types';
-import { supabase } from '../lib/supabaseClient';
 
 const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const apiUrl = (path: string) => `${API_BASE}${path}`;
 
 const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
   if (!API_BASE && !import.meta.env.DEV) throw new Error('VisionX API is not configured. Set VITE_API_BASE_URL.');
-  if (!supabase) throw new Error('Supabase Auth is not configured.');
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError || !session?.access_token) throw new Error('Your session has expired. Please sign in again.');
   const url = apiUrl(path);
   let r: Response;
   try {
     r = await fetch(url, {
       ...init,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...(init?.headers || {}) },
+      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     });
   } catch {
     throw new Error(API_BASE ? `VisionX backend is unreachable at ${API_BASE}.` : 'VisionX backend is not reachable.');
-  }
-  if (r.status === 401 || r.status === 403) {
-    await supabase.auth.signOut();
-    throw new Error('Your session is invalid. Please sign in again.');
   }
   if (!r.ok) {
     const body = await r.text().catch(() => '');
