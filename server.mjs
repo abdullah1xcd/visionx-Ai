@@ -23,9 +23,9 @@ app.use('/api',async(req,res,next)=>{
     const response=await fetch(supabaseUrl+'/auth/v1/user',{headers:{apikey:supabasePublishableKey,Authorization:'Bearer '+match[1]}});
     if(!response.ok)return res.status(401).json({error:'Invalid or expired session.'});
     const user=await response.json();
-    const allowedEmails=String(process.env.VISIONX_ALLOWED_EMAILS||'').split(',').map(value=>value.trim().toLowerCase()).filter(Boolean);
-    if(!allowedEmails.length)return res.status(503).json({error:'No VisionX users are allowlisted. Configure VISIONX_ALLOWED_EMAILS on the backend.'});
-    if(!user.email||!allowedEmails.includes(user.email.toLowerCase()))return res.status(403).json({error:'This account is not authorized for VisionX.'});
+    const providers=Array.isArray(user?.app_metadata?.providers)?user.app_metadata.providers:[];
+    const primaryProvider=user?.app_metadata?.provider;
+    if(primaryProvider!=='google'&&!providers.includes('google'))return res.status(403).json({error:'Sign in with a Google account to access VisionX.'});
     if(!user?.id)return res.status(401).json({error:'Invalid session.'});
     req.authUser={id:user.id,email:user.email||null};
     next();
