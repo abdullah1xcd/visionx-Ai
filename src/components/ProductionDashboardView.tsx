@@ -10,7 +10,7 @@ export const ProductionDashboardView:React.FC<Props>=({settings,activeCamera,onA
  const isNetwork=['rtsp','onvif','wifi_ip'].includes(activeCamera.type)&&/^rtsps?:\/\//i.test(activeCamera.source),isBluetooth=activeCamera.type==='bluetooth';
  const stop=()=>{streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;if(imageRef.current)imageRef.current.src='';setConnected(false);setDetections([]);setDetails([]);setSelectedId(null);prevRef.current.clear();detectionService.resetTracking();};
  const connect=async()=>{setError('');stop();if(isBluetooth){setError('Bluetooth can discover/control compatible devices but does not provide generic browser video.');onAddAlert('Bluetooth video is not available as a generic browser stream.','CAMERA_STATUS','INFO');return;}try{if(isNetwork){const img=imageRef.current;if(!img)throw new Error('Network image element unavailable.');img.src=`/api/stream?url=${encodeURIComponent(activeCamera.source)}`;return;}if(!navigator.mediaDevices?.getUserMedia)throw new Error('This browser does not provide webcam access.');const videoInputs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
-   const deviceMatch=/^Device\\s+(\\d+)$/i.exec(activeCamera.source.trim());
+   const deviceMatch=/^Device\s+(\d+)$/i.exec(activeCamera.source.trim());
    const videoConstraints:MediaTrackConstraints={width:{ideal:1280},height:{ideal:720}};
    if(deviceMatch){
     const requestedIndex=Number(deviceMatch[1]);
