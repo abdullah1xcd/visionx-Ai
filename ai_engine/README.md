@@ -1,28 +1,35 @@
-# VisionX AI Engine (v2)
+# Optional VisionX AI Engine (Local / Self-Hosted)
 
-Independent FastAPI inference service intended to run beside the Vercel-hosted frontend.
+This FastAPI + YOLO service is an **optional prototype** for developers who want to run inference on their own computer or their own infrastructure.
 
-## Endpoints
-- `GET /health` — health and model configuration.
-- `POST /detect` — YOLO object detection for one uploaded image, with optional person clothing-color estimates.
-- `POST /analyze-video` — server-side sampled-frame analysis; avoids browser seek/decode/inference serialisation.
-- `POST /pose` — optional YOLO pose keypoints.
+## Free browser mode (recommended)
 
-## Local run
+The normal VisionX web app does not need this service. Keep `VITE_AI_ENGINE_URL` empty to use the in-browser TensorFlow.js COCO-SSD model. No external AI host, API key, or paid GPU is required.
+
+## Run locally
+
 ```bash
 python -m venv .venv
 # activate the environment, then:
 pip install -r ai_engine/requirements.txt
-uvicorn ai_engine.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn ai_engine.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Models are downloaded automatically on first use. Default detector: `yolo11s.pt`. Set `MODEL_NAME=yolo11n.pt` for lower latency or `yolo11m.pt` for higher capacity (with more compute and memory). Pose weights load only when `/pose` is first called.
+Models are downloaded automatically on first use. The default detector is `yolo11s.pt`; `yolo11n.pt` uses less compute and is usually faster, while larger models need more memory and processing power.
 
-## Deployment
-Create a Render Web Service from this repository using root directory `.` and the Blueprint at `ai_engine/render.yaml`. Configure `ALLOWED_ORIGINS` to the exact deployed frontend origin. The initial blueprint uses a CPU service; use a GPU-capable host for higher throughput. Do not expect CPU inference to match GPU throughput.
+## Optional endpoints
 
-## Important
-- The frontend must call this service using `VITE_AI_ENGINE_URL`; the current frontend is not connected by this backend-only commit.
-- A successful API health check is not an accuracy benchmark. Measure precision/recall on representative labelled footage before choosing a production model or confidence threshold.
-- The video endpoint samples frames at the requested rate and returns all sampled results. For long videos, use lower `sample_fps` or `max_frames`; this is not a real-time streaming endpoint.
-- Clothing colors are approximate visible-pixel estimates and are marked with a consistency score, not a calibrated probability.
+- `GET /health` — service health and model configuration.
+- `POST /detect` — object detection for one uploaded image.
+- `POST /analyze-video` — sampled-frame video analysis.
+- `POST /pose` — pose keypoints.
+
+To connect a locally running service, set `VITE_AI_ENGINE_URL` to the reachable service URL in your local environment. Do not set this to localhost in a deployed public website: visitors' browsers would try to connect to their own computers.
+
+## Limitations
+
+- This service is not deployed by default and is not required for the free browser experience.
+- CPU inference can be slow on long or high-resolution videos.
+- Detection accuracy must be evaluated on representative labelled footage; a successful health check is not an accuracy benchmark.
+- Clothing colors are approximate visible-pixel estimates, not calibrated probabilities or semantic garment segmentation.
+- Pose keypoints require a separate pose model and do not automatically provide validated posture labels.
