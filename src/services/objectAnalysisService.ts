@@ -83,11 +83,15 @@ export function analyzeDetection(
   const isCar=cat==='car';
   const speed=isCar?estimateSpeedKmh(previous?[px,py]:null,[cx,cy],Math.max(0.05,deltaSeconds),pixelsPerMeter):
     {speedKmh:null,calibrated:false,reason:'Speed is only estimated for calibrated car tracking.'};
-  const color=source?estimateCropColor(source,[d.x1,d.y1,d.x2,d.y2],cat==='person'):{color:'Unknown',confidence:0};
+  const remoteColors=d.aiAttributes?.colors;
+  const upperName=remoteColors?.upper?.name||'Unknown',lowerName=remoteColors?.lower?.name||'Unknown';
+  const remoteColorLabel=upperName!=='Unknown'||lowerName!=='Unknown'?(`Upper: ${upperName} / Lower: ${lowerName}`):'Unknown';
+  const remoteColorConfidence=[remoteColors?.upper?.confidence,remoteColors?.lower?.confidence].filter((v):v is number=>typeof v==='number');
+  const color=remoteColors?{color:remoteColorLabel,confidence:remoteColorConfidence.length?remoteColorConfidence.reduce((a,b)=>a+b,0)/remoteColorConfidence.length:0}:(source?estimateCropColor(source,[d.x1,d.y1,d.x2,d.y2],cat==='person'):{color:'Unknown',confidence:0});
   let activity='Detected',posture='Not estimated';
   if(cat==='person'){
-    activity=moving?'Moving':'No clear movement';
-    posture='Not estimated (pose model required)';
+    activity=previous?(moving?'Moving':'No clear movement'):'Waiting for motion history';
+    posture=d.aiAttributes?.pose?.posture||'Pose sample pending';
   }else if(cat==='bicycle')activity=moving?'Moving':'Stationary';
   const vehicleType=isCar?(width/Math.max(1,height)>1.8?'Car / sedan-like':'Vehicle'):'N/A';
   return {
