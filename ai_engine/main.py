@@ -94,6 +94,10 @@ def color_name(bgr_crop: np.ndarray) -> dict[str, Any]:
         name = "White"
     elif sat < 35:
         name = "Gray"
+    elif 5 <= hue < 25 and val < 145:
+        name = "Brown"
+    elif 5 <= hue < 28 and sat < 95 and val >= 145:
+        name = "Beige"
     elif hue < 8 or hue >= 170:
         name = "Red"
     elif hue < 22:
