@@ -1,6 +1,6 @@
 import { CameraSourceItem, SecurityZone, SystemAlert, VideoAnalysisStats } from '../types';
 const api=async<T>(path:string,init?:RequestInit):Promise<T>=>{const r=await fetch(path,{headers:{'Content-Type':'application/json',...(init?.headers||{})},...init});if(!r.ok)throw new Error((await r.text())||`API ${r.status}`);return r.json()};
-let detectionQueue=Promise.resolve();
+let detectionQueue:Promise<unknown>=Promise.resolve();
 export const persistenceService={
  health:()=>api<{ok:boolean;sqlite:boolean;node:string}>('/api/health'),
  cameras:()=>api<CameraSourceItem[]>('/api/cameras'),
