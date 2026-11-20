@@ -159,7 +159,7 @@ source venv/bin/activate
 
 ### Step 3: Install Dependencies
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-desktop.txt
 ```
 
 ### Step 4: Download Pretrained Detection Model
