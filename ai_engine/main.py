@@ -120,25 +120,96 @@ def color_name(bgr_crop: np.ndarray) -> dict[str, Any]:
 
 
 def estimate_person_colors(frame: np.ndarray, xyxy: list[float]) -> dict[str, Any]:
+    """Approximate upper/lower garment-region colors from visible pixels, not semantic clothing labels."""
     h, w = frame.shape[:2]
     x1, y1, x2, y2 = [int(round(v)) for v in xyxy]
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = min(w, x2), min(h, y2)
     crop = frame[y1:y2, x1:x2]
-    if crop.size == 0:
-        return {"upper": color_name(None), "lower": color_name(None)}
+    if crop.size == 0 or crop.shape[0] < 24 or crop.shape[1] < 12:
+        unknown = color_name(None)
+        return {"upper": unknown, "lower": unknown}
     ch = crop.shape[0]
-    upper = crop[int(ch * .18):max(1, int(ch * .62)), :]
-    lower = crop[int(ch * .58):, :]
+    # Exclude the head and the extreme bottom of the detection where background/feet often enter.
+    upper = crop[int(ch * .24):max(1, int(ch * .60)), :]
+    lower = crop[int(ch * .60):max(1, int(ch * .88)), :]
     return {"upper": color_name(upper), "lower": color_name(lower)}
 
 
-def detect_frame(frame: np.ndarray, confidence: float = .35, image_size: int = 640, include_colors: bool = True) -> list[dict[str, Any]]:
+def box_iou_xyxy(a: np.ndarray, b: np.ndarray) -> float:
+    left, top = max(float(a[0]), float(b[0])), max(float(a[1]), float(b[1]))
+    right, bottom = min(float(a[2]), float(b[2])), min(float(a[3]), float(b[3]))
+    if right <= left or bottom <= top:
+        return 0.0
+    intersection = (right - left) * (bottom - top)
+    area_a = max(0.0, float(a[2] - a[0])) * max(0.0, float(a[3] - a[1]))
+    area_b = max(0.0, float(b[2] - b[0])) * max(0.0, float(b[3] - b[1]))
+    union = area_a + area_b - intersection
+    return intersection / union if union > 0 else 0.0
+
+
+def estimate_pose_for_people(frame: np.ndarray, person_boxes: list[list[float]], image_size: int) -> list[dict[str, Any] | None]:
+    """Run YOLO pose once and associate visible keypoints with the detector's person boxes."""
+    if not person_boxes:
+        return []
+    resized = resize_for_inference(frame)
+    rh, rw = resized.shape[:2]
+    sh, sw = frame.shape[0] / rh, frame.shape[1] / rw
+    prediction = get_pose_model().predict(resized, conf=0.3, imgsz=image_size, verbose=False)[0]
+    if prediction.boxes is None or prediction.keypoints is None:
+        return [None] * len(person_boxes)
+    pose_boxes = prediction.boxes.xyxy.cpu().numpy()
+    pose_points = prediction.keypoints.data.cpu().numpy()
+    output: list[dict[str, Any] | None] = []
+    for person_box in person_boxes:
+        target = np.asarray(person_box, dtype=np.float32)
+        best_index, best_iou = -1, 0.0
+        for index, pose_box in enumerate(pose_boxes):
+            scaled = np.asarray([pose_box[0] * sw, pose_box[1] * sh, pose_box[2] * sw, pose_box[3] * sh])
+            overlap = box_iou_xyxy(target, scaled)
+            if overlap > best_iou:
+                best_index, best_iou = index, overlap
+        if best_index < 0 or best_iou < 0.15:
+            output.append(None)
+            continue
+        points = pose_points[best_index]
+        visible = points[:, 2] >= 0.35 if points.shape[1] >= 3 else np.ones(len(points), dtype=bool)
+        # COCO keypoints: shoulders 5/6, hips 11/12. Only describe torso alignment;
+        # a single image cannot reliably distinguish sitting, standing, or intent.
+        required = [5, 6, 11, 12]
+        if not all(index < len(points) and visible[index] for index in required):
+            posture = "Insufficient visible keypoints"
+            pose_confidence = 0.0
+        else:
+            shoulders = np.mean(points[[5, 6], :2], axis=0)
+            hips = np.mean(points[[11, 12], :2], axis=0)
+            dx, dy = abs(float(shoulders[0] - hips[0])), abs(float(hips[1] - shoulders[1]))
+            angle = float(np.degrees(np.arctan2(dx, max(dy, 1.0))))
+            posture = "Leaning torso" if angle >= 38 else "Upright torso"
+            pose_confidence = float(np.mean(points[required, 2])) if points.shape[1] >= 3 else 0.0
+        output.append({
+            "posture": posture,
+            "confidence": round(pose_confidence, 3),
+            "keypoints": np.round(points, 3).tolist(),
+            "scope": "Torso alignment estimate only; not a validated activity or sitting/standing classifier.",
+        })
+    return output
+
+
+def detect_frame(
+    frame: np.ndarray,
+    confidence: float = .35,
+    image_size: int = 640,
+    include_colors: bool = True,
+    include_pose: bool = False,
+) -> list[dict[str, Any]]:
     source_h, source_w = frame.shape[:2]
     resized = resize_for_inference(frame)
     rh, rw = resized.shape[:2]
     result = get_model().predict(resized, conf=confidence, imgsz=image_size, verbose=False)[0]
     output: list[dict[str, Any]] = []
+    person_boxes: list[list[float]] = []
+    person_items: list[dict[str, Any]] = []
     if result.boxes is None:
         return output
     for box in result.boxes:
@@ -155,9 +226,22 @@ def detect_frame(frame: np.ndarray, confidence: float = .35, image_size: int = 6
             "confidence": round(float(box.conf.item()), 4),
             "bbox": [round(v, 1) for v in xyxy],
         }
-        if include_colors and class_id == 0:
-            item["colors"] = estimate_person_colors(frame, xyxy)
+        if class_id == 0:
+            person_boxes.append(xyxy)
+            person_items.append(item)
+            if include_colors:
+                item["colors"] = estimate_person_colors(frame, xyxy)
         output.append(item)
+    if include_pose and person_boxes:
+        try:
+            poses = estimate_pose_for_people(frame, person_boxes, image_size)
+            for item, pose in zip(person_items, poses):
+                if pose is not None:
+                    item["pose"] = pose
+        except Exception as exc:
+            # Detection remains usable if the optional pose model cannot load or infer.
+            for item in person_items:
+                item["pose"] = {"posture": "Pose unavailable", "confidence": 0.0, "error": type(exc).__name__}
     return output
 
 
@@ -167,7 +251,7 @@ def health() -> dict[str, Any]:
 
 
 @app.post("/detect")
-async def detect(file: UploadFile = File(...), confidence: float = .35, image_size: int = 640, include_colors: bool = True) -> dict[str, Any]:
+async def detect(file: UploadFile = File(...), confidence: float = .35, image_size: int = 640, include_colors: bool = True, include_pose: bool = False) -> dict[str, Any]:
     if not 0.05 <= confidence <= 0.95:
         raise HTTPException(422, "confidence must be between 0.05 and 0.95")
     if image_size not in (320, 480, 640, 960):
@@ -179,7 +263,7 @@ async def detect(file: UploadFile = File(...), confidence: float = .35, image_si
     if frame is None:
         raise HTTPException(415, "Unsupported or invalid image")
     try:
-        detections = detect_frame(frame, confidence, image_size, include_colors)
+        detections = detect_frame(frame, confidence, image_size, include_colors, include_pose)
         return {"width": int(frame.shape[1]), "height": int(frame.shape[0]), "detections": detections}
     except Exception as exc:
         raise HTTPException(503, f"Inference failed: {type(exc).__name__}: {exc}") from exc
@@ -192,6 +276,7 @@ async def analyze_video(
     sample_fps: float = 2.0,
     image_size: int = 640,
     max_frames: int = 900,
+    include_pose: bool = False,
 ) -> dict[str, Any]:
     if not 0.05 <= confidence <= 0.95:
         raise HTTPException(422, "confidence must be between 0.05 and 0.95")
@@ -223,7 +308,7 @@ async def analyze_video(
             if not ok:
                 break
             if frame_index % stride == 0:
-                detections = detect_frame(frame, confidence, image_size, include_colors=True)
+                detections = detect_frame(frame, confidence, image_size, include_colors=True, include_pose=include_pose)
                 results.append({"frame": frame_index, "time_seconds": round(frame_index / fps, 3) if fps > 0 else 0, "detections": detections})
                 sampled += 1
             frame_index += 1
