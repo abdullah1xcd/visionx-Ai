@@ -70,29 +70,30 @@ def resize_for_inference(frame: np.ndarray) -> np.ndarray:
 
 
 def color_name(bgr_crop: np.ndarray) -> dict[str, Any]:
-    """Estimate a representative clothing color, excluding extreme shadows/highlights."""
+    """Estimate dominant visible color while preserving dark garment pixels."""
     if bgr_crop is None or bgr_crop.size == 0:
         return {"name": "Unknown", "hex": None, "confidence": 0.0}
     h, w = bgr_crop.shape[:2]
-    # Ignore the outer silhouette/background; analyze the central torso/leg region.
-    roi = bgr_crop[int(h * 0.12):max(1, int(h * 0.88)), int(w * 0.18):max(1, int(w * 0.82))]
+    # Keep the central portion of the supplied garment region; avoid silhouette edges.
+    roi = bgr_crop[int(h * 0.08):max(1, int(h * 0.92)), int(w * 0.28):max(1, int(w * 0.72))]
     if roi.size == 0:
         roi = bgr_crop
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     pixels = hsv.reshape(-1, 3)
-    valid = pixels[(pixels[:, 2] > 28) & (pixels[:, 2] < 248)]
-    if len(valid) < 8:
-        valid = pixels
-    if not len(valid):
+    if not len(pixels):
         return {"name": "Unknown", "hex": None, "confidence": 0.0}
-    # Median HSV is more robust to isolated background pixels than a single mean.
-    med = np.median(valid, axis=0)
-    hue, sat, val = float(med[0]), float(med[1]), float(med[2])
-    if val < 48:
+
+    # Do NOT discard low-value pixels: that was causing black shirts to be
+    # represented by brighter skin/background pixels. Use a robust median and
+    # dark-pixel proportion before chromatic hue classification.
+    median_hsv = np.median(pixels, axis=0)
+    hue, sat, val = [float(v) for v in median_hsv]
+    dark_ratio = float(np.mean(pixels[:, 2] < 58))
+    if val < 62 or dark_ratio >= 0.55:
         name = "Black"
-    elif sat < 28 and val > 205:
+    elif val >= 205 and sat < 38:
         name = "White"
-    elif sat < 35:
+    elif sat < 38:
         name = "Gray"
     elif 5 <= hue < 25 and val < 145:
         name = "Brown"
@@ -114,11 +115,12 @@ def color_name(bgr_crop: np.ndarray) -> dict[str, Any]:
         name = "Purple"
     else:
         name = "Pink"
-    # Confidence is a simple consistency estimate, not a calibrated probability.
-    spread = float(np.median(np.abs(valid[:, 1] - sat)) + np.median(np.abs(valid[:, 2] - val)))
-    confidence = float(np.clip(1.0 - spread / 180.0, 0.0, 1.0))
-    bgr = roi.reshape(-1, 3)
-    med_bgr = np.median(bgr, axis=0).astype(np.uint8)
+
+    # Confidence reflects HSV consistency and is not a calibrated probability.
+    sat_spread = float(np.median(np.abs(pixels[:, 1].astype(float) - sat)))
+    val_spread = float(np.median(np.abs(pixels[:, 2].astype(float) - val)))
+    confidence = float(np.clip(1.0 - (sat_spread + val_spread) / 180.0, 0.0, 1.0))
+    med_bgr = np.median(roi.reshape(-1, 3), axis=0).astype(np.uint8)
     rgb = med_bgr[::-1]
     return {"name": name, "hex": "#{:02X}{:02X}{:02X}".format(*rgb.tolist()), "confidence": round(confidence, 2)}
 
@@ -133,10 +135,11 @@ def estimate_person_colors(frame: np.ndarray, xyxy: list[float]) -> dict[str, An
     if crop.size == 0 or crop.shape[0] < 24 or crop.shape[1] < 12:
         unknown = color_name(None)
         return {"upper": unknown, "lower": unknown}
-    ch = crop.shape[0]
-    # Exclude the head and the extreme bottom of the detection where background/feet often enter.
-    upper = crop[int(ch * .24):max(1, int(ch * .60)), :]
-    lower = crop[int(ch * .60):max(1, int(ch * .88)), :]
+    ch, cw = crop.shape[:2]
+    # Upper garment: central torso, excluding head/arms and most background.
+    upper = crop[int(ch * .30):max(1, int(ch * .62)), int(cw * .12):max(1, int(cw * .88))]
+    # Lower garment: central leg region, kept separate from the shirt.
+    lower = crop[int(ch * .62):max(1, int(ch * .88)), int(cw * .18):max(1, int(cw * .82))]
     return {"upper": color_name(upper), "lower": color_name(lower)}
 
 
@@ -240,8 +243,12 @@ def detect_frame(
         try:
             poses = estimate_pose_for_people(frame, person_boxes, image_size)
             for item, pose in zip(person_items, poses):
-                if pose is not None:
-                    item["pose"] = pose
+                item["pose"] = pose or {
+                    "posture": "No pose detected",
+                    "confidence": 0.0,
+                    "keypoints": [],
+                    "scope": "Torso alignment estimate only; no matching pose landmarks were detected in this sample.",
+                }
         except Exception as exc:
             # Detection remains usable if the optional pose model cannot load or infer.
             for item in person_items:
