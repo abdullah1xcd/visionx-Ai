@@ -16,7 +16,7 @@ export const persistenceService={
  removeZone:(id:string)=>api(`/api/zones/${id}`,{method:'DELETE'}),
  createVideoRun:(payload:Record<string,unknown>)=>api<{ok:boolean;id:string}>('/api/video-runs',{method:'POST',body:JSON.stringify(payload)}),
  updateVideoRun:(id:string,payload:Record<string,unknown>)=>api(`/api/video-runs/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(payload)}),
- saveDetections:(id:string,items:unknown[])=>{if(!items.length)return Promise.resolve({ok:true});let result:Promise<{ok:boolean}>;detectionQueue=detectionQueue.then(async()=>{result=await api<{ok:boolean}>(`/api/video-runs/${encodeURIComponent(id)}/detections`,{method:'POST',body:JSON.stringify({items})});return result}).catch(()=>({ok:false}));return detectionQueue.then(()=>result!);},
+ saveDetections:(id:string,items:unknown[])=>{if(!items.length)return Promise.resolve({ok:true});let result:{ok:boolean};detectionQueue=detectionQueue.then(async()=>{result=await api<{ok:boolean}>(`/api/video-runs/${encodeURIComponent(id)}/detections`,{method:'POST',body:JSON.stringify({items})});return result}).catch(()=>({ok:false}));return detectionQueue.then(()=>result!);},
  statistics:()=>api<{totals:{category:string;count:number}[];unique:{category:string;count:number}[];videos:number;processing?:number;cameras:number}>('/api/statistics')
 };
 export type PersistedVideoSummary={id:string;filename:string;duration:number;status:string;progress:number;current_frame:number;total_detections:number;unique_person:number;unique_car:number;unique_bicycle:number;unique_camera:number;created_at:string;updated_at:string};
