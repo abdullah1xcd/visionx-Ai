@@ -59,15 +59,20 @@ export interface CameraSourceItem {
   model?: string;
 }
 
+export type AlertStatus = 'NEW' | 'REVIEWED' | 'RESOLVED';
+export type AlertType = 'SPEED_WARNING' | 'CAMERA_STATUS' | 'OCR_LOW_CONFIDENCE' | 'QUALITY_ALERT' | 'ZONE_ENTRY' | 'ZONE_EXIT' | 'ZONE_CROSSING';
+export interface SecurityZone { id:string; cameraId:string; name:string; points:Array<[number,number]>; enabled:boolean; severity:'CRITICAL'|'WARNING'|'INFO'; trigger:'ENTRY'|'EXIT'|'CROSSING'; createdAt:string; }
 export interface SystemAlert {
   id: number;
   timestamp: string;
-  type: 'SPEED_WARNING' | 'CAMERA_STATUS' | 'OCR_LOW_CONFIDENCE' | 'QUALITY_ALERT';
+  type: AlertType;
   severity: 'CRITICAL' | 'WARNING' | 'INFO';
   message: string;
   cameraId: string;
   trackId?: number;
   acknowledged: boolean;
+  status?: AlertStatus;
+  notes?: string;
 }
 
 export interface AppSettingsState {
