@@ -19,7 +19,7 @@ export class VideoAnalysisService{
   const duration=video.duration;
   // Sample less often for long recordings: browser inference is CPU/GPU-bound and
   // seeking/decode overhead dominates. This keeps long videos usable on free hosting.
-  const stepSeconds=duration>=600?1.5:duration>=180?.75:duration>=60?.5:Math.max(.25,sampleEvery/30);
+  const stepSeconds=duration >= 600 ? 1.5 : duration >= 180 ? 0.75 : duration >= 60 ? 0.5 : Math.max(0.25, sampleEvery / 30);
   let frame=0;let last=-1;
   while(this.isActive(token)){while(this.paused&&this.isActive(token))await this.sleep(50);if(!this.isActive(token))break;
    const target=Math.min(duration,Math.max(0,last<0?0:last+stepSeconds));if(last>=0&&target<=last+.0001)break;
