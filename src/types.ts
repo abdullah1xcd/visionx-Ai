@@ -16,6 +16,10 @@ export interface DetectionResult {
   tracking_id: number;
   timestamp: string;
   frame_number: number;
+  aiAttributes?: {
+    colors?: { upper?: { name?: string; confidence?: number; hex?: string | null }; lower?: { name?: string; confidence?: number; hex?: string | null } };
+    pose?: { posture?: string; confidence?: number; keypoints?: number[][]; scope?: string };
+  };
 }
 
 export interface DetectedObject {
