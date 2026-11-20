@@ -1,112 +1,19 @@
-import React from 'react';
-import { AlertTriangle, Info, ShieldAlert, Check } from 'lucide-react';
-import { SystemAlert } from '../types';
-
-interface AlertsViewProps {
-  alerts: SystemAlert[];
-  onAcknowledgeAlert: (id: number) => void;
-  onAcknowledgeAll: () => void;
-}
-
-export const AlertsView: React.FC<AlertsViewProps> = ({
-  alerts,
-  onAcknowledgeAlert,
-  onAcknowledgeAll
-}) => {
-  return (
-    <div className="flex-1 p-6 overflow-y-auto bg-[#080A0D] text-[#F4F6F8]">
-      <div className="max-w-5xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#252C35] pb-4">
-          <div>
-            <h2 className="text-xl font-black tracking-wide text-white uppercase">
-              SYSTEM & DETECTION ALERTS
-            </h2>
-            <p className="text-xs text-[#9AA4AF] mt-1">
-              Automated notifications for vehicle speed thresholds, stream disconnects, and quality warnings
-            </p>
-          </div>
-
-          <button
-            onClick={onAcknowledgeAll}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#161C24] hover:bg-[#1C232B] text-slate-200 border border-[#252C35] hover:border-[#D4AF37] text-xs font-semibold transition-colors cursor-pointer"
-          >
-            <Check className="w-4 h-4 text-[#D4AF37]" />
-            <span>Acknowledge All</span>
-          </button>
-        </div>
-
-        {/* Alerts Feed */}
-        <div className="space-y-3">
-          {alerts.map((alert) => {
-            const isCritical = alert.severity === 'CRITICAL';
-            const isWarning = alert.severity === 'WARNING';
-            const borderAccentColor = isCritical ? '#F43F5E' : isWarning ? '#F59E0B' : '#38BDF8';
-
-            return (
-              <div
-                key={alert.id}
-                className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
-                  alert.acknowledged
-                    ? 'bg-[#0D1117] border-[#252C35] opacity-60'
-                    : 'bg-[#11161D] border-[#252C35]'
-                }`}
-                style={{ borderLeftWidth: '3px', borderLeftColor: borderAccentColor }}
-              >
-                <div className="flex items-start gap-3.5">
-                  <div className="mt-0.5">
-                    {isCritical ? (
-                      <ShieldAlert className="w-5 h-5 text-rose-500" />
-                    ) : isWarning ? (
-                      <AlertTriangle className="w-5 h-5 text-amber-400" />
-                    ) : (
-                      <Info className="w-5 h-5 text-sky-400" />
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`text-[11px] font-mono font-bold uppercase ${
-                          isCritical
-                            ? 'text-rose-400'
-                            : isWarning
-                            ? 'text-amber-400'
-                            : 'text-sky-400'
-                        }`}
-                      >
-                        [{alert.severity}]
-                      </span>
-                      <span className="text-[11px] font-semibold text-[#D4AF37]">
-                        Camera: {alert.cameraId}
-                      </span>
-                      <span className="text-[11px] text-[#68727D] font-mono">
-                        {alert.timestamp}
-                      </span>
-                      {alert.acknowledged && (
-                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60 font-medium">
-                          Acknowledged
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-sm font-medium text-white mt-1">{alert.message}</p>
-                  </div>
-                </div>
-
-                {!alert.acknowledged && (
-                  <button
-                    onClick={() => onAcknowledgeAlert(alert.id)}
-                    className="px-3 py-1.5 rounded bg-[#161C24] hover:bg-[#1C232B] text-slate-200 hover:text-white border border-[#252C35] hover:border-[#D4AF37] text-xs font-semibold transition-colors cursor-pointer shrink-0 ml-4"
-                  >
-                    Acknowledge
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+import React,{useMemo,useState}from'react';
+import{AlertTriangle,Bell,Check,CheckCheck,Info,Search,ShieldAlert}from'lucide-react';
+import{AlertStatus,SystemAlert}from'../types';
+interface Props{alerts:SystemAlert[];onAcknowledgeAlert:(id:number)=>void;onAcknowledgeAll:()=>void;onUpdateAlert:(id:number,patch:Partial<Pick<SystemAlert,'status'|'notes'|'acknowledged'>>)=>void;}
+const statusOf=(a:SystemAlert):AlertStatus=>a.status||(a.acknowledged?'REVIEWED':'NEW');
+const severityStyle=(s:SystemAlert['severity'])=>s==='CRITICAL'?'text-rose-400 border-rose-900/60 bg-rose-950/20':s==='WARNING'?'text-amber-300 border-amber-900/60 bg-amber-950/20':'text-sky-300 border-sky-900/60 bg-sky-950/20';
+export const AlertsView:React.FC<Props>=({alerts,onAcknowledgeAlert,onAcknowledgeAll,onUpdateAlert})=>{
+ const[filter,setFilter]=useState<'ALL'|AlertStatus>('ALL'),[severity,setSeverity]=useState('ALL'),[query,setQuery]=useState(''),[expanded,setExpanded]=useState<number|null>(null);
+ const filtered=useMemo(()=>alerts.filter(a=>(filter==='ALL'||statusOf(a)===filter)&&(severity==='ALL'||a.severity===severity)&&(!query||[a.message,a.cameraId,a.type,String(a.trackId||'')].join(' ').toLowerCase().includes(query.toLowerCase()))),[alerts,filter,severity,query]);
+ const counts={total:alerts.length,new:alerts.filter(a=>statusOf(a)==='NEW').length,reviewed:alerts.filter(a=>statusOf(a)==='REVIEWED').length,resolved:alerts.filter(a=>statusOf(a)==='RESOLVED').length,critical:alerts.filter(a=>a.severity==='CRITICAL'&&statusOf(a)!=='RESOLVED').length};
+ return <div className="flex-1 min-h-0 overflow-y-auto bg-[#080A0D] p-5 text-[#F4F6F8]"><div className="mx-auto max-w-6xl space-y-5">
+  <header className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-black tracking-wide">ALERT CENTER</h2><p className="mt-1 text-xs text-[#9AA4AF]">Review security events, camera health, and detection warnings in one place.</p></div><button onClick={onAcknowledgeAll} disabled={!counts.new} className="rounded-lg border border-[#252C35] bg-[#11161D] px-3 py-2 text-xs font-semibold text-[#D4AF37] disabled:opacity-40"><CheckCheck className="mr-1 inline h-4 w-4"/>Review all new</button></header>
+  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="rounded-xl border border-[#252C35] bg-[#0D1117] p-3"><p className="text-[10px] text-[#68727D]">TOTAL EVENTS</p><p className="mt-1 text-2xl font-semibold">{counts.total}</p></div><div className="rounded-xl border border-[#252C35] bg-[#0D1117] p-3"><p className="text-[10px] text-[#68727D]">NEW</p><p className="mt-1 text-2xl font-semibold text-[#D4AF37]">{counts.new}</p></div><div className="rounded-xl border border-[#252C35] bg-[#0D1117] p-3"><p className="text-[10px] text-[#68727D]">OPEN CRITICAL</p><p className="mt-1 text-2xl font-semibold text-rose-400">{counts.critical}</p></div><div className="rounded-xl border border-[#252C35] bg-[#0D1117] p-3"><p className="text-[10px] text-[#68727D]">RESOLVED</p><p className="mt-1 text-2xl font-semibold text-emerald-400">{counts.resolved}</p></div></div>
+  <div className="flex flex-wrap items-center gap-2"><div className="flex flex-1 items-center gap-2 rounded-lg border border-[#252C35] bg-[#0D1117] px-3 py-2"><Search className="h-4 w-4 text-[#68727D]"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search event, camera or tracking ID…" className="w-full bg-transparent text-xs outline-none placeholder:text-[#68727D]"/></div><select value={severity} onChange={e=>setSeverity(e.target.value)} className="rounded-lg border border-[#252C35] bg-[#0D1117] px-3 py-2 text-xs"><option value="ALL">All severity</option><option value="CRITICAL">Critical</option><option value="WARNING">Warning</option><option value="INFO">Info</option></select></div>
+  <div className="flex flex-wrap gap-1 border-b border-[#252C35]">{(['ALL','NEW','REVIEWED','RESOLVED'] as const).map(s=><button key={s} onClick={()=>setFilter(s)} className={filter===s?'border-b-2 border-[#D4AF37] px-3 py-2 text-[11px] font-semibold text-[#D4AF37]':'border-b-2 border-transparent px-3 py-2 text-[11px] font-semibold text-[#68727D]'}>{s==='ALL'?'All events':s.charAt(0)+s.slice(1).toLowerCase()}{s==='ALL'?' · '+counts.total:s==='NEW'?' · '+counts.new:''}</button>)}</div>
+  <div className="space-y-2">{filtered.length?filtered.map(a=>{const status=statusOf(a),critical=a.severity==='CRITICAL',warning=a.severity==='WARNING',Icon=critical?ShieldAlert:warning?AlertTriangle:Info;return <article key={a.id} className="overflow-hidden rounded-xl border border-[#252C35] bg-[#0D1117]"><button onClick={()=>setExpanded(expanded===a.id?null:a.id)} className="flex w-full items-center gap-3 p-4 text-left"><div className={'rounded-lg border p-2 '+severityStyle(a.severity)}><Icon className="h-4 w-4"/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className={'rounded border px-1.5 py-0.5 text-[9px] font-bold '+severityStyle(a.severity)}>{a.severity}</span><span className="text-[10px] text-[#9AA4AF]">{a.cameraId}</span>{a.trackId!==undefined&&<span className="text-[10px] text-[#D4AF37]">PERSON #{a.trackId}</span>}<span className="text-[10px] text-[#68727D]">{a.timestamp}</span></div><p className="mt-1 truncate text-xs font-medium">{a.message}</p></div><span className={status==='NEW'?'shrink-0 rounded-full bg-[#D4AF37]/10 px-2 py-1 text-[9px] font-semibold text-[#D4AF37]':status==='REVIEWED'?'shrink-0 rounded-full bg-sky-950/40 px-2 py-1 text-[9px] font-semibold text-sky-300':'shrink-0 rounded-full bg-emerald-950/40 px-2 py-1 text-[9px] font-semibold text-emerald-300'}>{status}</span><span className="text-[#68727D]">{expanded===a.id?'⌃':'⌄'}</span></button>
+   {expanded===a.id&&<div className="space-y-3 border-t border-[#252C35] bg-[#080A0D] p-4"><div className="grid gap-2 text-[10px] text-[#9AA4AF] sm:grid-cols-3"><span>Event type: <b className="text-[#F4F6F8]">{a.type.replace(/_/g,' ')}</b></span><span>Camera: <b className="text-[#F4F6F8]">{a.cameraId}</b></span><span>Tracking ID: <b className="text-[#F4F6F8]">{a.trackId??'—'}</b></span></div><label className="block text-[10px] text-[#9AA4AF]">Operator notes<textarea defaultValue={a.notes||''} onBlur={e=>{if(e.currentTarget.value!==(a.notes||''))onUpdateAlert(a.id,{notes:e.currentTarget.value})}} placeholder="Add review notes…" rows={2} className="mt-1 w-full resize-y rounded-lg border border-[#252C35] bg-[#0D1117] px-3 py-2 text-xs outline-none focus:border-[#D4AF37]"/></label><div className="flex flex-wrap gap-2">{status!=='REVIEWED'&&<button onClick={()=>onAcknowledgeAlert(a.id)} className="rounded-md border border-[#252C35] px-3 py-1.5 text-[10px] text-sky-300"><Check className="mr-1 inline h-3 w-3"/>Mark reviewed</button>}{status!=='RESOLVED'&&<button onClick={()=>onUpdateAlert(a.id,{status:'RESOLVED',acknowledged:true})} className="rounded-md border border-emerald-900/60 px-3 py-1.5 text-[10px] text-emerald-300"><CheckCheck className="mr-1 inline h-3 w-3"/>Resolve event</button>}{status==='RESOLVED'&&<button onClick={()=>onUpdateAlert(a.id,{status:'NEW',acknowledged:false})} className="rounded-md border border-[#252C35] px-3 py-1.5 text-[10px] text-[#9AA4AF]">Reopen</button>}</div></div>}</article>}) : <div className="rounded-xl border border-dashed border-[#252C35] py-12 text-center text-xs text-[#68727D]"><Bell className="mx-auto mb-2 h-6 w-6"/>{alerts.length?'No alerts match these filters.':'No alerts yet. Events will appear here when the AI detects a configured condition.'}</div>}</div>
+ </div></div>;
 };
