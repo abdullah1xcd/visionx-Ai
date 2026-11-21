@@ -215,8 +215,8 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({ onClose }) => 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6 select-none">
-      <div className="bg-[#11161D] border border-[#252C35] rounded-xl max-w-5xl w-full h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-6 select-none">
+      <div className="bg-[#11161D] border border-[#252C35] rounded-xl max-w-5xl w-full h-[calc(100dvh-16px)] sm:h-[85vh] flex flex-col overflow-hidden shadow-2xl">
         {/* Header */}
         <div className="px-5 py-3.5 bg-[#0D1117] border-b border-[#252C35] flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -245,9 +245,9 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({ onClose }) => 
         </div>
 
         {/* Content View */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex min-h-0 flex-col overflow-hidden sm:flex-row">
           {/* File Selector Sidebar */}
-          <div className="w-64 bg-[#080A0D] border-r border-[#252C35] p-3 space-y-1 overflow-y-auto">
+          <div className="w-full max-h-36 shrink-0 overflow-y-auto bg-[#080A0D] sm:max-h-none sm:w-64 border-r border-[#252C35] p-3 space-y-1 overflow-y-auto">
             <div className="text-[10px] font-bold text-[#68727D] uppercase tracking-wider px-2 py-1">
               Modules & Specs
             </div>
@@ -269,7 +269,7 @@ export const CodeViewerModal: React.FC<CodeViewerModalProps> = ({ onClose }) => 
 
           {/* Code Viewer Panel */}
           <div className="flex-1 flex flex-col bg-[#0D1117] overflow-hidden">
-            <div className="px-4 py-2 border-b border-[#252C35] bg-[#11161D] flex items-center justify-between text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-[#252C35] bg-[#11161D] text-xs">
               <span className="font-mono text-white font-bold">{selectedFile}</span>
               <span className="text-[11px] text-[#9AA4AF]">{currentSnippet.desc}</span>
             </div>
