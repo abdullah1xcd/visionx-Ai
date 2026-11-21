@@ -12,11 +12,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateSettings
 }) => {
   return (
-    <div className="flex-1 p-6 overflow-y-auto bg-[#080A0D] text-[#F4F6F8]">
+    <div className="flex-1 p-3 sm:p-6 overflow-y-auto bg-[#080A0D] text-[#F4F6F8]">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="border-b border-[#252C35] pb-4">
-          <h2 className="text-xl font-black tracking-wide text-white uppercase">
+          <h2 className="text-lg sm:text-xl font-black tracking-wide text-white uppercase">
             APPLICATION SETTINGS & AI TUNING
           </h2>
           <p className="text-xs text-[#9AA4AF] mt-1">
@@ -25,13 +25,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* 1. Appearance Settings */}
-        <div className="p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-[#D4AF37] flex items-center gap-2 border-b border-[#252C35] pb-2">
             <Palette className="w-4 h-4" />
             <span>Theme & Visual Appearance</span>
           </h3>
 
-          <div className="grid grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             {(['dark', 'light', 'system'] as const).map((mode) => (
               <button
                 key={mode}
@@ -52,13 +52,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* 2. Class-Specific Detection Thresholds */}
-        <div className="p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-[#D4AF37] flex items-center gap-2 border-b border-[#252C35] pb-2">
             <Eye className="w-4 h-4" />
             <span>Object Class Confidence Thresholds</span>
           </h3>
 
-          <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             {/* Person */}
             <div className="space-y-1.5 bg-[#080A0D] p-3 rounded-lg border border-[#252C35]">
               <div className="flex justify-between font-semibold">
@@ -170,13 +170,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* 3. Night Vision Configuration */}
-        <div className="p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-[#D4AF37] flex items-center gap-2 border-b border-[#252C35] pb-2">
             <Moon className="w-4 h-4" />
             <span>Night Vision Mode & Ambient Sensitivity</span>
           </h3>
 
-          <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-[#9AA4AF] font-semibold mb-1">Operating Mode:</label>
               <select
@@ -211,13 +211,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* 4. Hardware Acceleration & Inference Resolution */}
-        <div className="p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-[#D4AF37] flex items-center gap-2 border-b border-[#252C35] pb-2">
             <Cpu className="w-4 h-4" />
             <span>Inference Engine & Resolution</span>
           </h3>
 
-          <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-[#9AA4AF] font-semibold mb-1">Compute Device:</label>
               <select
@@ -272,7 +272,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* 5. Developer Diagnostics Panel (Requirement 17 & 18) */}
-        <div className="p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
+        <div className="p-4 sm:p-5 rounded-xl bg-[#11161D] border border-[#252C35] space-y-4">
           <div className="flex items-center justify-between border-b border-[#252C35] pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#D4AF37] flex items-center gap-2">
               <Cpu className="w-4 h-4" />
