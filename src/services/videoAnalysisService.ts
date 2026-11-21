@@ -5,26 +5,31 @@ export interface VideoAnalysisCallbacks{onFrame?:(s:VideoAnalysisSnapshot)=>void
 export interface VideoAnalysisRun{stop:()=>void;pause:()=>void;resume:()=>void}
 const emptyCounts=():Record<CategoryType,number>=>({all:0,person:0,car:0,bicycle:0,camera:0});
 export class VideoAnalysisService{
- private cancelled=false;private paused=false;private running=false;
- public stop(){this.cancelled=true;this.paused=false;}
+ private cancelled=false;private paused=false;private running=false;private runToken=0;
+ public stop(){this.cancelled=true;this.runToken++;this.paused=false;}
  public pause(){this.paused=true;}
  public resume(){this.paused=false;}
+ private isActive(token:number){return !this.cancelled&&token===this.runToken;}
  public async analyzeVideo(video:HTMLVideoElement,options:{confidenceThreshold?:number;sampleEveryFrames?:number;callbacks?:VideoAnalysisCallbacks}={}):Promise<VideoAnalysisRun>{
-  this.cancelled=false;this.paused=false;if(this.running)this.stop();this.running=true;const threshold=options.confidenceThreshold??.4;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??3));const cb=options.callbacks??{};
-  try{await this.waitForMetadata(video);await this.waitForFrame(video);if(!Number.isFinite(video.duration)||video.duration<=0||!video.videoWidth||!video.videoHeight)throw new Error('The selected video has no usable duration or dimensions.');detectionService.resetTracking();void this.process(video,threshold,sampleEvery,cb);}catch(e){this.running=false;throw e;}
-  return{stop:()=>this.stop(),pause:()=>this.pause(),resume:()=>this.resume()};
+  if(this.running)this.stop();const token=++this.runToken;this.cancelled=false;this.paused=false;this.running=true;const threshold=options.confidenceThreshold??.4;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??3));const cb=options.callbacks??{};
+  try{await this.waitForMetadata(video);await this.waitForFrame(video);if(!Number.isFinite(video.duration)||video.duration<=0||!video.videoWidth||!video.videoHeight)throw new Error('The selected video has no usable duration or dimensions.');if(!this.isActive(token))throw new Error('Analysis was cancelled.');detectionService.resetTracking();void this.process(video,threshold,sampleEvery,cb,token);}catch(e){if(token===this.runToken)this.running=false;throw e;}
+  return{stop:()=>{if(token===this.runToken)this.stop();},pause:()=>{if(token===this.runToken)this.pause();},resume:()=>{if(token===this.runToken)this.resume();}};
  }
- private async process(video:HTMLVideoElement,threshold:number,sampleEvery:number,cb:VideoAnalysisCallbacks){try{
-  const duration=video.duration;const stepSeconds=Math.max(.04,sampleEvery/30);let frame=0;let last=-1;
-  while(!this.cancelled){while(this.paused&&!this.cancelled)await this.sleep(50);if(this.cancelled)break;
+ private async process(video:HTMLVideoElement,threshold:number,sampleEvery:number,cb:VideoAnalysisCallbacks,token:number){try{
+  const duration=video.duration;
+  // Sample less often for long recordings: browser inference is CPU/GPU-bound and
+  // seeking/decode overhead dominates. This keeps long videos usable on free hosting.
+  const stepSeconds=duration >= 600 ? 1.5 : duration >= 180 ? 0.75 : duration >= 60 ? 0.5 : Math.max(0.25, sampleEvery / 30);
+  let frame=0;let last=-1;
+  while(this.isActive(token)){while(this.paused&&this.isActive(token))await this.sleep(50);if(!this.isActive(token))break;
    const target=Math.min(duration,Math.max(0,last<0?0:last+stepSeconds));if(last>=0&&target<=last+.0001)break;
-   await this.seek(video,target);if(this.cancelled)break;await this.waitForFrame(video);
+   await this.seek(video,target);if(!this.isActive(token))break;await this.waitForFrame(video);
    const detections=await detectionService.detectFrame(video,frame,threshold);const current=emptyCounts();for(const d of detections)current[d.category]++;current.all=detections.length;
    const diag=detectionService.getDiagnostics(video.videoWidth,video.videoHeight,0);const unique={all:diag.uniqueTrackedCounts.person+diag.uniqueTrackedCounts.car+diag.uniqueTrackedCounts.bicycle+diag.uniqueTrackedCounts.camera,person:diag.uniqueTrackedCounts.person,car:diag.uniqueTrackedCounts.car,bicycle:diag.uniqueTrackedCounts.bicycle,camera:diag.uniqueTrackedCounts.camera};
-   cb.onFrame?.({frameNumber:frame,timeSeconds:video.currentTime,detections,currentCounts:current,uniqueCounts:unique});cb.onProgress?.(Math.min(100,video.currentTime/duration*100),frame,video.currentTime);last=video.currentTime;frame+=sampleEvery;if(last>=duration-.001)break;
+   cb.onFrame?.({frameNumber:frame,timeSeconds:video.currentTime,detections,currentCounts:current,uniqueCounts:unique});cb.onProgress?.(Math.min(100,video.currentTime/duration*100),frame,video.currentTime);last=video.currentTime;frame++;if(last>=duration-.001)break;
   }
-  if(!this.cancelled){await this.seek(video,duration);cb.onProgress?.(100,frame,duration);cb.onComplete?.();}
- }catch(e){if(!this.cancelled)cb.onError?.(e instanceof Error?e:new Error(String(e)));}finally{this.running=false;}}
+  if(this.isActive(token)){await this.seek(video,duration);cb.onProgress?.(100,frame,duration);cb.onComplete?.();}
+ }catch(e){if(this.isActive(token))cb.onError?.(e instanceof Error?e:new Error(String(e)));}finally{if(token===this.runToken)this.running=false;}}
  public buildStats(snaps:VideoAnalysisSnapshot[],enhancedFramesCount=0,enhancedCropsCount=0):VideoAnalysisStats{const total={person:0,car:0,bicycle:0,camera:0};let unique={person:0,car:0,bicycle:0,camera:0};const timelineDensity=snaps.map(s=>({time:this.formatTime(s.timeSeconds),seconds:s.timeSeconds,people:s.currentCounts.person,cars:s.currentCounts.car,bicycles:s.currentCounts.bicycle,cameras:s.currentCounts.camera}));for(const s of snaps){total.person+=s.currentCounts.person;total.car+=s.currentCounts.car;total.bicycle+=s.currentCounts.bicycle;total.camera+=s.currentCounts.camera;unique={person:s.uniqueCounts.person,car:s.uniqueCounts.car,bicycle:s.uniqueCounts.bicycle,camera:s.uniqueCounts.camera};}return{totalDetections:total,uniqueObjects:unique,timelineDensity,enhancedFramesCount,enhancedCropsCount};}
  public buildTrackedObjects(snaps:VideoAnalysisSnapshot[]):TrackedVideoObject[]{const map=new Map<string,TrackedVideoObject>();for(const s of snaps)for(const d of s.detections){const key=`${d.category}:${d.tracking_id}`;const old=map.get(key);if(!old)map.set(key,{id:`${d.category.toUpperCase()} #${d.tracking_id}`,trackId:d.tracking_id,category:d.category as any,firstSeenTime:this.formatTime(s.timeSeconds),firstSeenSeconds:s.timeSeconds,lastSeenTime:this.formatTime(s.timeSeconds),lastSeenSeconds:s.timeSeconds,durationVisible:'00:00',detectionCount:1,avgConfidence:d.confidence,maxConfidence:d.confidence,minConfidence:d.confidence,movementDirection:'Unknown',approxPath:'Not calculated',currentBbox:[d.x1,d.y1,d.x2,d.y2]});else{old.lastSeenTime=this.formatTime(s.timeSeconds);old.lastSeenSeconds=s.timeSeconds;old.durationVisible=this.formatTime(Math.max(0,old.lastSeenSeconds-old.firstSeenSeconds));old.detectionCount++;old.avgConfidence=((old.avgConfidence*(old.detectionCount-1))+d.confidence)/old.detectionCount;old.maxConfidence=Math.max(old.maxConfidence,d.confidence);old.minConfidence=Math.min(old.minConfidence,d.confidence);old.currentBbox=[d.x1,d.y1,d.x2,d.y2];}}return[...map.values()];}
  public buildTimeline(snaps:VideoAnalysisSnapshot[]):VideoTimelineEvent[]{const events:VideoTimelineEvent[]=[];const seen=new Set<string>();for(const s of snaps)for(const d of s.detections){const key=`${d.category}:${d.tracking_id}`,objectId=`${d.category.toUpperCase()} #${d.tracking_id}`,type=seen.has(key)?'detected':'entered';events.push({id:`${key}-${s.frameNumber}`,timestamp:this.formatTime(s.timeSeconds),timestampSeconds:s.timeSeconds,type,objectId,category:d.category as any,message:type==='entered'?`${objectId} entered detection`: `${objectId} detected`});seen.add(key);}return events;}

@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+# Local Python AI engine environment and generated artifacts
+.venv/
+.venv-ai/
+__pycache__/
+*.py[cod]
+visionx.sqlite*

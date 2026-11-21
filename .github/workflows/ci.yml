@@ -2,7 +2,7 @@ name: VisionX CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/visionx-ai-engine-upgrade]
   pull_request:
     branches: [main]
 

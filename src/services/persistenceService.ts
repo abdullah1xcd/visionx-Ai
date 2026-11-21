@@ -1,6 +1,6 @@
-import { CameraSourceItem, SystemAlert, VideoAnalysisStats } from '../types';
+import { CameraSourceItem, SecurityZone, SystemAlert, VideoAnalysisStats } from '../types';
 const api=async<T>(path:string,init?:RequestInit):Promise<T>=>{const r=await fetch(path,{headers:{'Content-Type':'application/json',...(init?.headers||{})},...init});if(!r.ok)throw new Error((await r.text())||`API ${r.status}`);return r.json()};
-let detectionQueue=Promise.resolve();
+let detectionQueue:Promise<unknown>=Promise.resolve();
 export const persistenceService={
  health:()=>api<{ok:boolean;sqlite:boolean;node:string}>('/api/health'),
  cameras:()=>api<CameraSourceItem[]>('/api/cameras'),
@@ -8,10 +8,15 @@ export const persistenceService={
  removeCamera:(id:string)=>api(`/api/cameras/${encodeURIComponent(id)}`,{method:'DELETE'}),
  alerts:()=>api<SystemAlert[]>('/api/alerts'),
  saveAlert:(alert:SystemAlert)=>api('/api/alerts',{method:'POST',body:JSON.stringify(alert)}),
- acknowledgeAlert:(id:number)=>api(`/api/alerts/${id}`,{method:'PATCH',body:JSON.stringify({acknowledged:true})}),
+ acknowledgeAlert:(id:number)=>api(`/api/alerts/${id}`,{method:'PATCH',body:JSON.stringify({status:'REVIEWED',acknowledged:true})}),
+ updateAlert:(id:number,patch:Partial<Pick<SystemAlert,'status'|'notes'|'acknowledged'>>)=>api(`/api/alerts/${id}`,{method:'PATCH',body:JSON.stringify(patch)}),
+ zones:(cameraId:string)=>api<SecurityZone[]>(`/api/zones?cameraId=${encodeURIComponent(cameraId)}`),
+ saveZone:(zone:SecurityZone)=>api<SecurityZone>('/api/zones',{method:'POST',body:JSON.stringify(zone)}),
+ updateZone:(id:string,patch:Partial<SecurityZone>)=>api(`/api/zones/${id}`,{method:'PATCH',body:JSON.stringify(patch)}),
+ removeZone:(id:string)=>api(`/api/zones/${id}`,{method:'DELETE'}),
  createVideoRun:(payload:Record<string,unknown>)=>api<{ok:boolean;id:string}>('/api/video-runs',{method:'POST',body:JSON.stringify(payload)}),
  updateVideoRun:(id:string,payload:Record<string,unknown>)=>api(`/api/video-runs/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(payload)}),
- saveDetections:(id:string,items:unknown[])=>{if(!items.length)return Promise.resolve({ok:true});let result:Promise<{ok:boolean}>;detectionQueue=detectionQueue.then(async()=>{result=await api<{ok:boolean}>(`/api/video-runs/${encodeURIComponent(id)}/detections`,{method:'POST',body:JSON.stringify({items})});return result}).catch(()=>({ok:false}));return detectionQueue.then(()=>result!);},
+ saveDetections:(id:string,items:unknown[])=>{if(!items.length)return Promise.resolve({ok:true});let result:{ok:boolean};detectionQueue=detectionQueue.then(async()=>{result=await api<{ok:boolean}>(`/api/video-runs/${encodeURIComponent(id)}/detections`,{method:'POST',body:JSON.stringify({items})});return result}).catch(()=>({ok:false}));return detectionQueue.then(()=>result!);},
  statistics:()=>api<{totals:{category:string;count:number}[];unique:{category:string;count:number}[];videos:number;processing?:number;cameras:number}>('/api/statistics')
 };
 export type PersistedVideoSummary={id:string;filename:string;duration:number;status:string;progress:number;current_frame:number;total_detections:number;unique_person:number;unique_car:number;unique_bicycle:number;unique_camera:number;created_at:string;updated_at:string};

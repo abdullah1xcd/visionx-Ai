@@ -16,6 +16,10 @@ export interface DetectionResult {
   tracking_id: number;
   timestamp: string;
   frame_number: number;
+  aiAttributes?: {
+    colors?: { upper?: { name?: string; confidence?: number; hex?: string | null }; lower?: { name?: string; confidence?: number; hex?: string | null } };
+    pose?: { posture?: string; confidence?: number; keypoints?: number[][]; scope?: string };
+  };
 }
 
 export interface DetectedObject {
@@ -55,15 +59,20 @@ export interface CameraSourceItem {
   model?: string;
 }
 
+export type AlertStatus = 'NEW' | 'REVIEWED' | 'RESOLVED';
+export type AlertType = 'SPEED_WARNING' | 'CAMERA_STATUS' | 'OCR_LOW_CONFIDENCE' | 'QUALITY_ALERT' | 'ZONE_ENTRY' | 'ZONE_EXIT' | 'ZONE_CROSSING';
+export interface SecurityZone { id:string; cameraId:string; name:string; points:Array<[number,number]>; enabled:boolean; severity:'CRITICAL'|'WARNING'|'INFO'; trigger:'ENTRY'|'EXIT'|'CROSSING'; createdAt:string; }
 export interface SystemAlert {
   id: number;
   timestamp: string;
-  type: 'SPEED_WARNING' | 'CAMERA_STATUS' | 'OCR_LOW_CONFIDENCE' | 'QUALITY_ALERT';
+  type: AlertType;
   severity: 'CRITICAL' | 'WARNING' | 'INFO';
   message: string;
   cameraId: string;
   trackId?: number;
   acknowledged: boolean;
+  status?: AlertStatus;
+  notes?: string;
 }
 
 export interface AppSettingsState {
