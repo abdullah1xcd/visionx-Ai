@@ -24,7 +24,7 @@ export class VideoAnalysisService{
   const wasMuted=video.muted;
   try{
    const duration=video.duration;
-   const baseInterval=0.5;
+   const baseInterval=Math.max(0.5,sampleEvery/30);
    let sampleTime=0;
    let frame=0;
    let currentInterval=baseInterval;
