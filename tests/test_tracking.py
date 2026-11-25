@@ -1,38 +1,46 @@
-"""Unit tests for Multi-Object Tracker (ByteTrack)."""
+"""Tests for VisionX's native ByteTrack metadata adapter."""
 
 import unittest
-from app.ai.tracker import ByteTracker, calculate_iou
+from app.ai.tracker import ByteTracker
 from app.ai.detector import DetectionResult
 
 
-class TestByteTracker(unittest.TestCase):
+class TestByteTrackerAdapter(unittest.TestCase):
     def setUp(self):
-        self.tracker = ByteTracker(max_lost_frames=5, iou_thresh=0.3)
+        self.tracker = ByteTracker(max_lost_frames=2, smoothing_factor=1.0)
 
-    def test_iou_calculation(self):
-        box1 = (10, 10, 50, 50)
-        box2 = (10, 10, 50, 50)
-        iou = calculate_iou(box1, box2)
-        self.assertAlmostEqual(iou, 1.0, places=3)
+    def detection(self, track_id, bbox=(10, 10, 50, 50), category="person"):
+        return DetectionResult(
+            category=category,
+            confidence=0.9,
+            bbox=bbox,
+            class_id=0,
+            track_id=track_id,
+        )
 
-        box3 = (100, 100, 150, 150)
-        self.assertEqual(calculate_iou(box1, box3), 0.0)
+    def test_preserves_ids_assigned_by_ultralytics(self):
+        first = self.tracker.update([self.detection(17)])
+        second = self.tracker.update([self.detection(17, (12, 10, 52, 50))])
+        self.assertEqual(first[0].track_id, 17)
+        self.assertEqual(second[0].track_id, 17)
 
-    def test_track_continuity(self):
-        det1 = [DetectionResult(category="car", confidence=0.9, bbox=(50, 50, 100, 100), class_id=2)]
-        res1 = self.tracker.update(det1)
-        self.assertEqual(len(res1), 1)
-        id_1 = res1[0].track_id
-        self.assertIsNotNone(id_1)
+    def test_does_not_invent_ids_for_untracked_detections(self):
+        self.assertEqual(self.tracker.update([self.detection(None)]), [])
 
-        # Move slightly in next frame
-        det2 = [DetectionResult(category="car", confidence=0.92, bbox=(55, 52, 105, 102), class_id=2)]
-        res2 = self.tracker.update(det2)
-        self.assertEqual(len(res2), 1)
-        id_2 = res2[0].track_id
+    def test_active_counts_and_expiration(self):
+        self.tracker.update([self.detection(4)])
+        self.assertEqual(self.tracker.get_active_count()["person"], 1)
+        self.tracker.update([])
+        self.assertEqual(self.tracker.get_active_count()["person"], 0)
+        self.tracker.update([])
+        self.tracker.update([])
+        self.assertNotIn(4, self.tracker.tracks)
 
-        # Stable ID must be preserved
-        self.assertEqual(id_1, id_2)
+    def test_direction_and_bbox_telemetry(self):
+        self.tracker.update([self.detection(8, (0, 0, 20, 20))])
+        result = self.tracker.update([self.detection(8, (20, 0, 40, 20))])
+        self.assertEqual(result[0].bbox, (20, 0, 40, 20))
+        self.assertEqual(self.tracker.tracks[8].direction, "East")
 
 
 if __name__ == "__main__":

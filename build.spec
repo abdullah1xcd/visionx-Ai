@@ -15,6 +15,7 @@ datas = [
     (str(ROOT_DIR / 'models'), 'models'),
     (str(ROOT_DIR / 'data'), 'data'),
     (str(ROOT_DIR / 'assets'), 'assets'),
+    (str(ROOT_DIR / 'app' / 'config' / 'bytetrack.yaml'), 'app/config'),
 ]
 
 # Collect ultralytics and easyocr/paddleocr assets

@@ -58,6 +58,7 @@ class DetectionWorker(QThread if PYSIDE_AVAILABLE else object):
         self.fps_meter = FPSMeter()
         self.running = False
         self.filter_category: str = "ALL"  # "ALL", "PEOPLE", "CARS", "BICYCLES", "CAMERAS"
+        self._last_camera_id: Optional[str] = None
 
     def set_filter(self, category: str):
         """Sets the visual filter category without stopping detection engine."""
@@ -90,13 +91,20 @@ class DetectionWorker(QThread if PYSIDE_AVAILABLE else object):
                 time.sleep(0.03)
                 continue
 
+            camera_id = self.camera_manager.active_camera_id
+            if self._last_camera_id is not None and camera_id != self._last_camera_id:
+                self.detector.reset_tracking()
+                self.tracker.reset()
+                logger.info("Reset ByteTrack state after active camera changed")
+            self._last_camera_id = camera_id
+
             fps = self.fps_meter.update()
 
             # 1. Night Vision Processing (Software Monochrome or Auto-detection)
             processed_frame, nv_active, nv_telemetry = self.night_vision.process_frame(raw_frame)
 
-            # 2. Automatic object detection with class-specific thresholds
-            raw_detections = self.detector.detect(processed_frame)
+            # 2. YOLO detection + persistent native ByteTrack association\n            # Low-confidence boxes are processed internally before display filtering.
+            raw_detections = self.detector.track(processed_frame)
 
             # 3. Tracking: assign stable IDs and apply temporal smoothing
             tracked_detections = self.tracker.update(raw_detections)

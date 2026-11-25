@@ -1,13 +1,31 @@
-"""Multi-Object Tracker providing stable identity assignment and temporal smoothing (ByteTrack / BoT-SORT)."""
+"""Track metadata adapter for Ultralytics' native ByteTrack implementation.
 
-from typing import List, Dict, Tuple, Optional
-import numpy as np
+Association, Kalman prediction, and track lifecycle are handled by Ultralytics
+when ObjectDetector.track() is called. This class preserves VisionX telemetry
+(direction, smoothing, and active category counts) without reimplementing
+or mislabelling the association algorithm.
+"""
+
+from typing import Dict, List, Optional, Tuple
+
 from app.ai.detector import DetectionResult
-from app.utils.logger import logger
+
+
+def calculate_iou(box_a: Tuple[int, int, int, int], box_b: Tuple[int, int, int, int]) -> float:
+    """Compatibility helper; native ByteTrack performs its own association."""
+    x1 = max(box_a[0], box_b[0])
+    y1 = max(box_a[1], box_b[1])
+    x2 = min(box_a[2], box_b[2])
+    y2 = min(box_a[3], box_b[3])
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+    area_a = max(0, box_a[2] - box_a[0]) * max(0, box_a[3] - box_a[1])
+    area_b = max(0, box_b[2] - box_b[0]) * max(0, box_b[3] - box_b[1])
+    union = area_a + area_b - intersection
+    return intersection / union if union > 0 else 0.0
 
 
 class TrackedObject:
-    """Represents an active track trajectory across multiple video frames with temporal smoothing."""
+    """VisionX telemetry for one native ByteTrack identity."""
 
     def __init__(
         self,
@@ -15,20 +33,20 @@ class TrackedObject:
         category: str,
         bbox: Tuple[int, int, int, int],
         confidence: float,
-        smoothing_factor: float = 0.75
+        smoothing_factor: float = 0.75,
     ):
         self.track_id = track_id
         self.category = category
         self.raw_bbox = bbox
-        self.smoothed_bbox = [float(v) for v in bbox]
+        self.smoothed_bbox = [float(value) for value in bbox]
         self.confidence = confidence
         self.smoothing_factor = smoothing_factor
         self.positions: List[Tuple[float, float]] = [self._center(bbox)]
         self.lost_frames = 0
         self.age = 1
         self.speed_kmh: Optional[float] = None
-        self.direction: str = "Stationary"
-        self.color: str = "Unknown"
+        self.direction = "Stationary"
+        self.color = "Unknown"
 
     @staticmethod
     def _center(box: Tuple[int, int, int, int]) -> Tuple[float, float]:
@@ -37,150 +55,112 @@ class TrackedObject:
 
     @property
     def bbox(self) -> Tuple[int, int, int, int]:
-        """Returns integer bounding box after temporal smoothing."""
-        return (
-            int(round(self.smoothed_bbox[0])),
-            int(round(self.smoothed_bbox[1])),
-            int(round(self.smoothed_bbox[2])),
-            int(round(self.smoothed_bbox[3])),
-        )
+        return tuple(int(round(value)) for value in self.smoothed_bbox)
 
-    def update(self, new_bbox: Tuple[int, int, int, int], confidence: float):
-        """Updates track with new detection and applies temporal exponential moving average smoothing."""
+    def update(self, new_bbox: Tuple[int, int, int, int], confidence: float) -> None:
         self.raw_bbox = new_bbox
         self.confidence = confidence
         self.lost_frames = 0
         self.age += 1
 
-        # Temporal smoothing: Prevents bounding boxes from jumping or vibrating
         alpha = self.smoothing_factor
-        for i in range(4):
-            self.smoothed_bbox[i] = alpha * new_bbox[i] + (1.0 - alpha) * self.smoothed_bbox[i]
+        for index in range(4):
+            self.smoothed_bbox[index] = (
+                alpha * new_bbox[index] + (1.0 - alpha) * self.smoothed_bbox[index]
+            )
 
-        new_center = self._center(self.bbox)
-        prev_center = self.positions[-1]
-        self.positions.append(new_center)
+        center = self._center(self.bbox)
+        previous = self.positions[-1]
+        self.positions.append(center)
         if len(self.positions) > 30:
             self.positions.pop(0)
 
-        # Compute smoothed movement trajectory & direction
         if len(self.positions) >= 5:
-            start_pos = self.positions[-5]
-            dx = new_center[0] - start_pos[0]
-            dy = new_center[1] - start_pos[1]
+            dx = center[0] - self.positions[-5][0]
+            dy = center[1] - self.positions[-5][1]
         else:
-            dx = new_center[0] - prev_center[0]
-            dy = new_center[1] - prev_center[1]
+            dx = center[0] - previous[0]
+            dy = center[1] - previous[1]
 
-        if abs(dx) > 4 or abs(dy) > 4:
-            if abs(dx) > abs(dy) * 1.2:
-                self.direction = "East" if dx > 0 else "West"
-            elif abs(dy) > abs(dx) * 1.2:
-                self.direction = "South" if dy > 0 else "North"
-            else:
-                if dx > 0 and dy > 0:
-                    self.direction = "South-East"
-                elif dx > 0 and dy < 0:
-                    self.direction = "North-East"
-                elif dx < 0 and dy > 0:
-                    self.direction = "South-West"
-                else:
-                    self.direction = "North-West"
-        else:
+        if abs(dx) <= 4 and abs(dy) <= 4:
             self.direction = "Stationary"
-
-
-def calculate_iou(boxA: Tuple[int, int, int, int], boxB: Tuple[int, int, int, int]) -> float:
-    """Calculates Intersection over Union between two bounding boxes."""
-    xA = max(boxA[0], boxB[0])
-    yA = max(boxA[1], boxB[1])
-    xB = min(boxA[2], boxB[2])
-    yB = min(boxA[3], boxB[3])
-
-    interArea = max(0, xB - xA) * max(0, yB - yA)
-    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
-
-    denom = float(boxAArea + boxBArea - interArea)
-    if denom <= 0:
-        return 0.0
-    return interArea / denom
+        elif abs(dx) > abs(dy) * 1.2:
+            self.direction = "East" if dx > 0 else "West"
+        elif abs(dy) > abs(dx) * 1.2:
+            self.direction = "South" if dy > 0 else "North"
+        elif dx > 0 and dy > 0:
+            self.direction = "South-East"
+        elif dx > 0 and dy < 0:
+            self.direction = "North-East"
+        elif dx < 0 and dy > 0:
+            self.direction = "South-West"
+        else:
+            self.direction = "North-West"
 
 
 class ByteTracker:
-    """ByteTrack-inspired multi-object tracker with dual-stage association and temporal smoothing."""
+    """Adapter for identities produced by Ultralytics' real ByteTrack tracker."""
 
-    def __init__(self, max_lost_frames: int = 45, iou_thresh: float = 0.30, smoothing_factor: float = 0.75):
+    def __init__(
+        self,
+        max_lost_frames: int = 45,
+        iou_thresh: float = 0.30,
+        smoothing_factor: float = 0.75,
+    ):
+        # max_lost_frames is retained for compatibility with existing settings.
         self.max_lost_frames = max_lost_frames
         self.iou_thresh = iou_thresh
         self.smoothing_factor = smoothing_factor
         self.tracks: Dict[int, TrackedObject] = {}
-        self.next_id = 1
 
     def update(self, detections: List[DetectionResult]) -> List[DetectionResult]:
-        """Matches incoming detections with existing tracks using two-stage IoU association."""
-        matched_track_ids = set()
-        matched_det_indices = set()
+        """Update telemetry using IDs assigned upstream by Ultralytics ByteTrack."""
+        seen_ids = set()
+        tracked = []
 
-        # Step 1: Associate detections with existing tracks of the same category
-        for det_idx, det in enumerate(detections):
-            best_iou = 0.0
-            best_track_id = None
+        for detection in detections:
+            if detection.track_id is None:
+                continue
 
-            for t_id, track in self.tracks.items():
-                if t_id in matched_track_ids:
-                    continue
-                if track.category != det.category:
-                    continue
+            track_id = int(detection.track_id)
+            seen_ids.add(track_id)
+            track = self.tracks.get(track_id)
 
-                iou = calculate_iou(det.bbox, track.bbox)
-                if iou > best_iou and iou >= self.iou_thresh:
-                    best_iou = iou
-                    best_track_id = t_id
-
-            if best_track_id is not None:
-                self.tracks[best_track_id].update(det.bbox, det.confidence)
-                det.track_id = best_track_id
-                # Use smoothed bbox for rendering
-                det.bbox = self.tracks[best_track_id].bbox
-                matched_track_ids.add(best_track_id)
-                matched_det_indices.add(det_idx)
-
-        # Step 2: Create new tracks for unmatched detections
-        for det_idx, det in enumerate(detections):
-            if det_idx not in matched_det_indices:
-                new_id = self.next_id
-                self.next_id += 1
-                new_track = TrackedObject(
-                    new_id,
-                    det.category,
-                    det.bbox,
-                    det.confidence,
-                    smoothing_factor=self.smoothing_factor
+            if track is None or track.category != detection.category:
+                track = TrackedObject(
+                    track_id,
+                    detection.category,
+                    detection.bbox,
+                    detection.confidence,
+                    smoothing_factor=self.smoothing_factor,
                 )
-                self.tracks[new_id] = new_track
-                det.track_id = new_id
-                matched_track_ids.add(new_id)
+                self.tracks[track_id] = track
+            else:
+                track.update(detection.bbox, detection.confidence)
 
-        # Step 3: Age and purge tracks that haven't been detected for max_lost_frames
-        to_delete = []
-        for t_id, track in self.tracks.items():
-            if t_id not in matched_track_ids:
+            detection.track_id = track_id
+            detection.bbox = track.bbox
+            tracked.append(detection)
+
+        expired = []
+        for track_id, track in self.tracks.items():
+            if track_id not in seen_ids:
                 track.lost_frames += 1
                 if track.lost_frames > self.max_lost_frames:
-                    to_delete.append(t_id)
+                    expired.append(track_id)
 
-        for t_id in to_delete:
-            del self.tracks[t_id]
+        for track_id in expired:
+            del self.tracks[track_id]
 
-        return detections
+        return tracked
 
     def get_active_count(self) -> Dict[str, int]:
-        """Returns live counts of currently active tracks per category."""
         counts = {"person": 0, "car": 0, "bicycle": 0, "camera": 0}
         for track in self.tracks.values():
-            if track.lost_frames == 0:
-                cat = track.category.lower()
-                if cat in counts:
-                    counts[cat] += 1
+            if track.lost_frames == 0 and track.category.lower() in counts:
+                counts[track.category.lower()] += 1
         return counts
+
+    def reset(self) -> None:
+        """Clear VisionX telemetry when the underlying video source is reset."""
+        self.tracks.clear()
