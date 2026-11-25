@@ -2,7 +2,7 @@ name: Python Tracking Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/real-bytetrack]
   pull_request:
     branches: [main]
 
