@@ -12,6 +12,14 @@ export interface TrackSummary { id:number; category:CategoryType; confidence:num
 type Source=HTMLVideoElement|HTMLCanvasElement|HTMLImageElement;
 
 class RealDetectionService {
+ // Prefer an explicitly configured backend. On a local Vite session, automatically
+ // connect to the local FastAPI/YOLO service so localhost uses the real YOLO engine.
+ private getAiEngineUrl():string {
+  const configured=this.getAiEngineUrl();
+  if(configured)return configured.replace(/\\/+$/,'');
+  if(typeof window!=='undefined'&&(window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1'))return 'http://127.0.0.1:8000';
+  return '';
+ }
  private model:cocoSsd.ObjectDetection|null=null; private isModelLoading=false; private modelLoadPromise:Promise<boolean>|null=null; private engineStatus:AIEngineStatus='INITIALIZING'; private statusMessage='Initializing AI Engine...'; private deviceName='Detecting...'; private nextTrackId=1; private latestFrame=0; private activeTracks:InternalTrack[]=[]; private uniqueCategoryTrackIds={person:new Set<number>(),car:new Set<number>(),bicycle:new Set<number>(),camera:new Set<number>()}; private lastInferenceTimeMs=0; private inferenceFrameTimes:number[]=[]; private diagnosticLogs:string[]=[]; private isInferenceRunning=false; private remoteUnavailable=false;
  constructor(){this.initModel();}
  // Share one in-flight initialization across app, dashboard, and detection callers.
