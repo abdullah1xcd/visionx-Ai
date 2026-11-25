@@ -22,7 +22,7 @@ export class VideoAnalysisService{
  }
  private async process(video:HTMLVideoElement,threshold:number,sampleEvery:number,cb:VideoAnalysisCallbacks){const wasMuted=video.muted;try{
   const duration=video.duration;let frame=0;let lastTime=-1;let lastPresented=0;this.activeVideo=video;video.muted=true;
-  if(video.ended||video.currentTime>=duration-.01)video.currentTime=0;
+  if(video.currentTime>.001)await this.seek(video,0);
   await video.play();
   while(!this.cancelled){
    while(this.paused&&!this.cancelled){video.pause();await this.sleep(50);}
@@ -32,6 +32,7 @@ export class VideoAnalysisService{
    while(lastPresented>0&&sample.presentedFrames>0&&sample.presentedFrames-lastPresented<sampleEvery&&!this.cancelled)sample=await this.nextPresentedFrame(video);
    if(this.cancelled)break;
    const time=Math.max(0,Math.min(duration,sample.time));
+   if(sample.presentedFrames===0&&lastTime>=0&&time-lastTime<sampleEvery/30)continue;
    if(lastTime>=0&&time<=lastTime+.0001){if(video.ended)break;continue;}
    const detections=await detectionService.detectFrame(video,frame,threshold);
    const current=emptyCounts();for(const d of detections)current[d.category]++;current.all=detections.length;
