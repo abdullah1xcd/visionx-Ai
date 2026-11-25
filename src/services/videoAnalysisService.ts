@@ -28,6 +28,7 @@ export class VideoAnalysisService{
    while(this.paused&&!this.cancelled){video.pause();await this.sleep(50);}
    if(this.cancelled)break;
    if(video.paused)await video.play();
+   if(video.ended)break;
    let sample=await this.nextPresentedFrame(video);
    while(lastPresented>0&&sample.presentedFrames>0&&sample.presentedFrames-lastPresented<sampleEvery&&!this.cancelled)sample=await this.nextPresentedFrame(video);
    if(this.cancelled)break;
