@@ -95,8 +95,8 @@ class DetectionWorker(QThread if PYSIDE_AVAILABLE else object):
             # 1. Night Vision Processing (Software Monochrome or Auto-detection)
             processed_frame, nv_active, nv_telemetry = self.night_vision.process_frame(raw_frame)
 
-            # 2. Automatic object detection with class-specific thresholds
-            raw_detections = self.detector.detect(processed_frame)
+            # 2. YOLO detection + persistent native ByteTrack association\n            # Low-confidence boxes are processed internally before display filtering.
+            raw_detections = self.detector.track(processed_frame)
 
             # 3. Tracking: assign stable IDs and apply temporal smoothing
             tracked_detections = self.tracker.update(raw_detections)
