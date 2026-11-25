@@ -245,6 +245,18 @@ Run performance benchmark:
 python scripts/benchmark.py
 ```
 
+Run a reproducible native ByteTrack benchmark on a recorded video:
+```bash
+python scripts/benchmark_tracking.py --video path/to/video.mp4
+```
+
+Optional arguments:
+```bash
+python scripts/benchmark_tracking.py --video clip.mp4 --max-frames 600 --stride 1 --warmup 5 --save-video runs/annotated.mp4
+```
+
+The video benchmark writes per-frame latency and observed track IDs to CSV, plus an aggregate JSON report (mean/median/P95/P99 latency, offline processing FPS, and unique IDs). Warm-up frames are excluded from timing. Use the same video, model weights, inference resolution, confidence thresholds, and hardware when comparing tracker versions. These outputs are not ground-truth accuracy metrics: ID switches, IDF1, HOTA, and MOTA require annotated reference tracks and are intentionally not reported by this script. Offline processing FPS is not a guarantee of live-camera FPS.
+
 ---
 
 ## 10. Future Roadmap
