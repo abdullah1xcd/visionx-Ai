@@ -26,7 +26,7 @@ class DetectionResult:
 class ObjectDetector:
     """YOLO detector and Ultralytics ByteTrack integration."""
 
-    COCO_TARGET_MAP = {0: "person", 1: "bicycle", 2: "car"}
+    COCO_TARGET_MAP = {0: "person", 1: "bicycle", 2: "car", 5: "car", 7: "car"}
 
     def __init__(self, model_path: Optional[str] = None):
         self.model_path = model_path or settings.detection.custom_model_path
