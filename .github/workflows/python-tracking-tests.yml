@@ -17,4 +17,4 @@ jobs:
       - name: Install lightweight test dependencies
         run: python -m pip install numpy opencv-python-headless
       - name: Run tracking adapter tests
-        run: python -m unittest discover -s tests -p 'test_tracking.py' -v
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
