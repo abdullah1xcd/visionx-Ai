@@ -56,7 +56,7 @@ class GreedyIoUTracker:
         candidates = []
         for index, detection in enumerate(detections):
             for track_id, track in self.tracks.items():
-                if track.lost == 0 and track.category == detection.category:
+                if track.lost <= self.max_lost and track.category == detection.category:
                     score = self.iou(track.bbox, detection.bbox)
                     if score >= self.match_threshold:
                         candidates.append((score, index, track_id))
