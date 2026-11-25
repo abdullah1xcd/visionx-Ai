@@ -107,18 +107,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-frames", type=int, default=0, help="Maximum sampled frames per method; 0 = all.")
     parser.add_argument("--stride", type=int, default=1, help="Process every Nth decoded frame.")
     parser.add_argument("--warmup", type=int, default=5, help="Warm-up frames excluded from timing.")
+    parser.add_argument("--iou-match-threshold", type=float, default=0.30,
+                        help="Greedy-IoU baseline matching threshold (0 < value <= 1).")
     parser.add_argument("--output-dir", default="runs/tracking_comparison")
     return parser.parse_args()
 
 
 def benchmark_method(detector: ObjectDetector, video_path: Path, method: str,
-                     max_frames: int, stride: int, warmup: int) -> tuple[dict, list[dict]]:
+                     max_frames: int, stride: int, warmup: int,
+                     iou_match_threshold: float) -> tuple[dict, list[dict]]:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
 
     iou_tracker = GreedyIoUTracker(
-        match_threshold=float(settings.tracking.match_thresh),
+        match_threshold=iou_match_threshold,
         max_lost=int(settings.tracking.track_buffer),
     )
     byte_adapter = ByteTracker(
@@ -203,8 +206,9 @@ def main() -> int:
     if not video_path.is_file():
         print(f"ERROR: video not found: {video_path}")
         return 2
-    if args.max_frames < 0 or args.stride < 1 or args.warmup < 0:
-        print("ERROR: max-frames and warmup must be >= 0; stride must be >= 1.")
+    if (args.max_frames < 0 or args.stride < 1 or args.warmup < 0
+            or not 0.0 < args.iou_match_threshold <= 1.0):
+        print("ERROR: max-frames and warmup must be >= 0; stride >= 1; iou-match-threshold in (0, 1].")
         return 2
 
     detector = ObjectDetector()
@@ -219,7 +223,8 @@ def main() -> int:
     for method in ("Greedy-IoU", "ByteTrack"):
         print(f"Running {method}...")
         summary, rows = benchmark_method(
-            detector, video_path, method, args.max_frames, args.stride, args.warmup
+            detector, video_path, method, args.max_frames, args.stride, args.warmup,
+            args.iou_match_threshold,
         )
         summaries.append(summary)
         all_rows.extend(rows)
@@ -235,6 +240,7 @@ def main() -> int:
             "inference_size": detector.inference_size,
             "detector_confidence_floor": 0.05,
             "nms_iou": settings.detection.iou_threshold,
+            "greedy_iou_match_threshold": args.iou_match_threshold,
             "stride": args.stride,
             "warmup_frames_excluded_per_method": args.warmup,
         },
