@@ -213,10 +213,10 @@ def main() -> int:
         return 3
 
     # Each method gets a fresh VideoCapture and processes the same sampled frame sequence.
-    # ByteTrack is run first so its persistent tracker state is never mixed with predict().
+    # Run predict()-only IoU first; then enable persistent tracking for the final ByteTrack pass.
     summaries = []
     all_rows = []
-    for method in ("ByteTrack", "Greedy-IoU"):
+    for method in ("Greedy-IoU", "ByteTrack"):
         print(f"Running {method}...")
         summary, rows = benchmark_method(
             detector, video_path, method, args.max_frames, args.stride, args.warmup
