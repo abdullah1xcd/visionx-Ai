@@ -10,7 +10,7 @@ export class VideoAnalysisService{
  public pause(){this.paused=true;this.activeVideo?.pause();}
  public resume(){this.paused=false;if(this.activeVideo)this.activeVideo.play().catch(()=>{});}
  public async analyzeVideo(video:HTMLVideoElement,options:{confidenceThreshold?:number;sampleEveryFrames?:number;callbacks?:VideoAnalysisCallbacks}={}):Promise<VideoAnalysisRun>{
-  this.cancelled=false;this.paused=false;if(this.running)this.stop();this.running=true;const threshold=options.confidenceThreshold??.4;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??3));const cb=options.callbacks??{};
+  this.cancelled=false;this.paused=false;if(this.running)this.stop();this.running=true;const threshold=options.confidenceThreshold??.4;const sampleEvery=Math.max(1,Math.floor(options.sampleEveryFrames??3));let currentSampleEvery=sampleEvery;const cb=options.callbacks??{};
   try{await this.waitForMetadata(video);await this.waitForFrame(video);if(!Number.isFinite(video.duration)||video.duration<=0||!video.videoWidth||!video.videoHeight)throw new Error('The selected video has no usable duration or dimensions.');detectionService.resetTracking();void this.process(video,threshold,sampleEvery,cb);}catch(e){this.running=false;throw e;}
   return{stop:()=>this.stop(),pause:()=>this.pause(),resume:()=>this.resume()};
  }
@@ -30,7 +30,7 @@ export class VideoAnalysisService{
    if(video.paused)await video.play();
    if(video.ended)break;
    let sample=await this.nextPresentedFrame(video);
-   while(lastPresented>0&&sample.presentedFrames>0&&sample.presentedFrames-lastPresented<sampleEvery&&!this.cancelled)sample=await this.nextPresentedFrame(video);
+   while(lastPresented>0&&sample.presentedFrames>0&&sample.presentedFrames-lastPresented<currentSampleEvery&&!this.cancelled)sample=await this.nextPresentedFrame(video);
    if(this.cancelled)break;
    const time=Math.max(0,Math.min(duration,sample.time));
    if(sample.presentedFrames===0&&lastTime>=0&&time-lastTime<sampleEvery/30)continue;
@@ -41,7 +41,7 @@ export class VideoAnalysisService{
    const unique={all:diag.uniqueTrackedCounts.person+diag.uniqueTrackedCounts.car+diag.uniqueTrackedCounts.bicycle+diag.uniqueTrackedCounts.camera,person:diag.uniqueTrackedCounts.person,car:diag.uniqueTrackedCounts.car,bicycle:diag.uniqueTrackedCounts.bicycle,camera:diag.uniqueTrackedCounts.camera};
    cb.onFrame?.({frameNumber:frame,timeSeconds:time,detections,currentCounts:current,uniqueCounts:unique});
    cb.onProgress?.(Math.min(100,time/duration*100),frame,time);
-   frame+=sampleEvery;lastTime=time;if(sample.presentedFrames>0)lastPresented=sample.presentedFrames;
+   const inferenceMs=detectionService.getDiagnostics(video.videoWidth,video.videoHeight,0).lastInferenceMs;currentSampleEvery=Math.max(sampleEvery,Math.min(12,Math.ceil(inferenceMs/(1000/30))+1));frame+=currentSampleEvery;lastTime=time;if(sample.presentedFrames>0)lastPresented=sample.presentedFrames;
    if(video.ended||time>=duration-.02)break;
   }
   if(!this.cancelled){cb.onProgress?.(100,frame,duration);cb.onComplete?.();}
