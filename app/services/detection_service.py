@@ -58,6 +58,7 @@ class DetectionWorker(QThread if PYSIDE_AVAILABLE else object):
         self.fps_meter = FPSMeter()
         self.running = False
         self.filter_category: str = "ALL"  # "ALL", "PEOPLE", "CARS", "BICYCLES", "CAMERAS"
+        self._last_camera_id: Optional[str] = None
 
     def set_filter(self, category: str):
         """Sets the visual filter category without stopping detection engine."""
@@ -89,6 +90,13 @@ class DetectionWorker(QThread if PYSIDE_AVAILABLE else object):
             if not ret or raw_frame is None:
                 time.sleep(0.03)
                 continue
+
+            camera_id = self.camera_manager.active_camera_id
+            if self._last_camera_id is not None and camera_id != self._last_camera_id:
+                self.detector.reset_tracking()
+                self.tracker.reset()
+                logger.info("Reset ByteTrack state after active camera changed")
+            self._last_camera_id = camera_id
 
             fps = self.fps_meter.update()
 
