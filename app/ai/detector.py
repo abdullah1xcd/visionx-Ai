@@ -102,8 +102,8 @@ class ObjectDetector:
     def _category_for_class(class_id: int) -> Optional[str]:
         if class_id in ObjectDetector.COCO_TARGET_MAP:
             return ObjectDetector.COCO_TARGET_MAP[class_id]
-        if class_id == 67:
-            return "camera"
+        # COCO class 67 is "cell phone", not a camera. The standard
+        # YOLOv8 COCO model has no dedicated camera class.
         return None
 
     def _convert_boxes(self, boxes, require_track_id: bool) -> List[DetectionResult]:
