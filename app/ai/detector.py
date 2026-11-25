@@ -162,6 +162,16 @@ class ObjectDetector:
             logger.error(f"Detection inference error: {exc}")
             return []
 
+    def reset_tracking(self) -> None:
+        """Reset Ultralytics tracker state when the active camera changes."""
+        predictor = getattr(self.model, "predictor", None)
+        trackers = getattr(predictor, "trackers", None)
+        if trackers:
+            for tracker in trackers:
+                reset = getattr(tracker, "reset", None)
+                if callable(reset):
+                    reset()
+
     def track(self, frame: np.ndarray) -> List[DetectionResult]:
         """Run YOLO + persistent Ultralytics ByteTrack on one video frame.
 
