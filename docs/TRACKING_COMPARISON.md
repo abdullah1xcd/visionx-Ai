@@ -21,6 +21,7 @@ python scripts/tracking_comparison.py \
   --max-frames 600 \
   --stride 1 \
   --warmup 10 \
+  --iou-match-threshold 0.30 \
   --output-dir runs/tracking_comparison
 ```
 
@@ -34,6 +35,7 @@ The script writes:
 - Same loaded YOLO weights and compute device.
 - Same inference image size.
 - Same detector confidence floor (0.05) and NMS IoU setting.
+- Greedy-IoU association threshold is independently set to 0.30 by default (`--iou-match-threshold`); it is not copied from ByteTrack's `match_thresh`.
 - Same VisionX category display thresholds.
 - Warm-up frames excluded from latency/FPS calculations.
 
