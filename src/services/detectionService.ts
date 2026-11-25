@@ -1,5 +1,4 @@
-import * as tf from '@tensorflow/tfjs';
-import * as cocoSsd from '@tensorflow-models/coco-ssd';
+import type * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { CategoryType, DetectionQualityStatus } from '../types';
 
 export interface DetectionResult { class_id:number; class_name:string; category:CategoryType; confidence:number; x1:number; y1:number; x2:number; y2:number; tracking_id:number; timestamp:string; frame_number:number; }
@@ -10,9 +9,36 @@ interface InternalTrack { id:number; category:CategoryType; class_name:string; b
 type Source=HTMLVideoElement|HTMLCanvasElement|HTMLImageElement;
 
 class RealDetectionService {
- private model:cocoSsd.ObjectDetection|null=null; private isModelLoading=false; private engineStatus:AIEngineStatus='INITIALIZING'; private statusMessage='Initializing AI Engine...'; private deviceName='Detecting...'; private nextTrackId=1; private activeTracks:InternalTrack[]=[]; private uniqueCategoryTrackIds={person:new Set<number>(),car:new Set<number>(),bicycle:new Set<number>(),camera:new Set<number>()}; private lastInferenceTimeMs=0; private lastInferenceResolution='Not available'; private inferenceFrameTimes:number[]=[]; private diagnosticLogs:string[]=[]; private isInferenceRunning=false;
+ private model:cocoSsd.ObjectDetection|null=null; private modelLoadPromise:Promise<boolean>|null=null; private engineStatus:AIEngineStatus='INITIALIZING'; private statusMessage='Initializing AI Engine...'; private deviceName='Detecting...'; private nextTrackId=1; private activeTracks:InternalTrack[]=[]; private uniqueCategoryTrackIds={person:new Set<number>(),car:new Set<number>(),bicycle:new Set<number>(),camera:new Set<number>()}; private lastInferenceTimeMs=0; private lastInferenceResolution='Not available'; private inferenceFrameTimes:number[]=[]; private diagnosticLogs:string[]=[]; private isInferenceRunning=false;
  constructor(){this.initModel();}
- async initModel(){if(this.model)return true;if(this.isModelLoading)return false;this.isModelLoading=true;this.engineStatus='INITIALIZING';this.statusMessage='Loading Real Neural Network...';this.addLog('Initializing TensorFlow.js neural inference backend...');try{await tf.ready();const backend=tf.getBackend();this.deviceName=backend==='webgl'?'WebGL (GPU Acceleration)':backend==='wasm'?'WASM (CPU)':`${backend.toUpperCase()} (CPU)`;this.addLog(`TFJS Backend initialized: ${this.deviceName}`);this.model=await cocoSsd.load({base:'mobilenet_v2'});this.engineStatus='ACTIVE';this.statusMessage='AI Engine Active (Real Inference)';this.addLog('COCO-SSD MobileNetV2 loaded.');return true;}catch(e:any){this.engineStatus='ERROR';this.statusMessage=`Model Load Error: ${e?.message||'Failed'}`;this.addLog(`FATAL: ${this.statusMessage}`);return false;}finally{this.isModelLoading=false;}}
+ async initModel():Promise<boolean>{
+  if(this.model)return true;
+  if(this.modelLoadPromise)return this.modelLoadPromise;
+  this.modelLoadPromise=(async()=>{
+   this.engineStatus='INITIALIZING';
+   this.statusMessage='Loading Real Neural Network...';
+   this.addLog('Initializing TensorFlow.js neural inference backend...');
+   try{
+    const tf=await import('@tensorflow/tfjs');
+    const cocoSsd=await import('@tensorflow-models/coco-ssd');
+    await tf.ready();
+    const backend=tf.getBackend();
+    this.deviceName=backend==='webgl'?'WebGL (GPU Acceleration)':backend==='wasm'?'WASM (CPU)':`${backend.toUpperCase()} (CPU)`;
+    this.addLog(`TFJS Backend initialized: ${this.deviceName}`);
+    this.model=await cocoSsd.load({base:'mobilenet_v2'});
+    this.engineStatus='ACTIVE';
+    this.statusMessage='AI Engine Active (Real Inference)';
+    this.addLog('COCO-SSD MobileNetV2 loaded.');
+    return true;
+   }catch(e:any){
+    this.engineStatus='ERROR';
+    this.statusMessage=`Model Load Error: ${e?.message||'Failed'}`;
+    this.addLog(`FATAL: ${this.statusMessage}`);
+    return false;
+   }
+  })().finally(()=>{this.modelLoadPromise=null;});
+  return this.modelLoadPromise;
+ }
  getStatus(){return{status:this.engineStatus,message:this.statusMessage,device:this.deviceName};} isReady(){return !!this.model&&this.engineStatus==='ACTIVE';}
  mapCategory(c:string):CategoryType|null{const x=c.toLowerCase().trim();if(x==='person')return'person';if(x==='car'||x==='truck'||x==='bus')return'car';if(x==='bicycle')return'bicycle';return null;}
  async detectFrame(source:Source,frameNumber:number,threshold=0.4):Promise<DetectionResult[]>{if(!this.model||this.engineStatus!=='ACTIVE'||this.isInferenceRunning)return[];this.isInferenceRunning=true;const t0=performance.now();try{const sourceWidth=source instanceof HTMLVideoElement?source.videoWidth:source instanceof HTMLImageElement?source.naturalWidth:source.width;const sourceHeight=source instanceof HTMLVideoElement?source.videoHeight:source instanceof HTMLImageElement?source.naturalHeight:source.height;let inferenceSource:Source=source;let scaleX=1,scaleY=1;const maxInferenceDimension=768;const largest=Math.max(sourceWidth,sourceHeight);if(largest>maxInferenceDimension){const factor=maxInferenceDimension/largest;const inferenceCanvas=document.createElement('canvas');inferenceCanvas.width=Math.max(1,Math.round(sourceWidth*factor));inferenceCanvas.height=Math.max(1,Math.round(sourceHeight*factor));const context=inferenceCanvas.getContext('2d');if(context){context.drawImage(source,0,0,inferenceCanvas.width,inferenceCanvas.height);inferenceSource=inferenceCanvas;scaleX=sourceWidth/inferenceCanvas.width;scaleY=sourceHeight/inferenceCanvas.height;}}const inferenceWidth=inferenceSource instanceof HTMLVideoElement?inferenceSource.videoWidth:inferenceSource instanceof HTMLImageElement?inferenceSource.naturalWidth:inferenceSource.width;const inferenceHeight=inferenceSource instanceof HTMLVideoElement?inferenceSource.videoHeight:inferenceSource instanceof HTMLImageElement?inferenceSource.naturalHeight:inferenceSource.height;this.lastInferenceResolution=`${inferenceWidth}x${inferenceHeight}`;const raw=await this.model.detect(inferenceSource as any);this.lastInferenceTimeMs=Math.round(performance.now()-t0);const now=performance.now();this.inferenceFrameTimes.push(now);if(this.inferenceFrameTimes.length>30)this.inferenceFrameTimes.shift();const w=source instanceof HTMLVideoElement?source.videoWidth:source instanceof HTMLImageElement?source.naturalWidth:source.width;const h=source instanceof HTMLVideoElement?source.videoHeight:source instanceof HTMLImageElement?source.naturalHeight:source.height;const valid=raw.map(p=>{const category=this.mapCategory(p.class);const score=Number(p.score);const [rawX,rawY,rawW,rawH]=p.bbox;const x=rawX*scaleX,y=rawY*scaleY,bw=rawW*scaleX,bh=rawH*scaleY;return{category,class_name:p.class,confidence:score,bbox:[Math.max(0,Math.min(w,x)),Math.max(0,Math.min(h,y)),Math.max(0,Math.min(w,x+bw)),Math.max(0,Math.min(h,y+bh))] as [number,number,number,number]};}).filter(d=>d.category&&d.confidence>=threshold&&d.confidence<=1&&d.bbox[2]>d.bbox[0]&&d.bbox[3]>d.bbox[1]) as {category:CategoryType;class_name:string;confidence:number;bbox:[number,number,number,number]}[];const result=this.updateSpatialTracker(valid,frameNumber);this.isInferenceRunning=false;return result;}catch(e){this.addLog(`Inference error: ${e instanceof Error?e.message:String(e)}`);this.isInferenceRunning=false;return[];}}
